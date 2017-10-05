@@ -1,0 +1,2 @@
+multiline_match_arm_forces_block = true
+multiline_closure_forces_block = true

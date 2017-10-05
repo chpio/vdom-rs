@@ -1,0 +1,125 @@
+use path::Key;
+use widget::WidgetDataTrait;
+use Str;
+
+use std::collections::HashMap;
+
+#[derive(Debug)]
+pub struct Node {
+    pub ty: Str,
+    pub children: Vec<(Option<Key>, Child)>,
+    pub keyed_children: HashMap<Key, usize>,
+    pub attributes: HashMap<Str, Str>,
+}
+
+#[derive(Debug)]
+pub struct NodeBuilder {
+    ty: Str,
+    children: Vec<(Option<Key>, Child)>,
+    keyed_children: HashMap<Key, usize>,
+    attributes: HashMap<Str, Str>,
+}
+
+impl NodeBuilder {
+    pub fn new<T>(ty: T) -> NodeBuilder
+    where
+        T: Into<Str>,
+    {
+        NodeBuilder {
+            ty: ty.into(),
+            children: Vec::new(),
+            keyed_children: HashMap::new(),
+            attributes: HashMap::new(),
+        }
+    }
+
+    pub fn build(self) -> Node {
+        Node {
+            ty: self.ty,
+            children: self.children,
+            keyed_children: self.keyed_children,
+            attributes: self.attributes,
+        }
+    }
+
+    pub fn add_child<C>(mut self, child: C) -> NodeBuilder
+    where
+        C: Into<Child>,
+    {
+        self.children.push((None, child.into()));
+        self
+    }
+
+    pub fn add_keyed_child<K, C>(mut self, key: K, child: C) -> NodeBuilder
+    where
+        K: Into<Key>,
+        C: Into<Child>,
+    {
+        let key = key.into();
+        let child = child.into();
+        self.keyed_children.insert(key.clone(), self.children.len());
+        self.children.push((Some(key), child));
+        self
+    }
+
+    pub fn add_children<I>(mut self, iter: I) -> NodeBuilder
+    where
+        I: IntoIterator<Item = (Option<Key>, Child)>,
+    {
+        for (key, child) in iter {
+            self.children.push((key, child));
+        }
+        self
+    }
+
+    pub fn add_attribute<N, V>(mut self, name: N, value: V) -> NodeBuilder
+    where
+        N: Into<Str>,
+        V: Into<Str>,
+    {
+        self.attributes.insert(name.into(), value.into());
+        self
+    }
+
+    pub fn add_attributes<I>(mut self, iter: I) -> NodeBuilder
+    where
+        I: IntoIterator<Item = (Str, Str)>,
+    {
+        for (name, value) in iter {
+            self.attributes.insert(name, value);
+        }
+        self
+    }
+}
+
+#[derive(Debug)]
+pub enum Child {
+    Text(Str),
+    Node(Node),
+    Widget(Box<WidgetDataTrait>, Option<Box<Child>>),
+    Tombstone,
+}
+
+impl From<Str> for Child {
+    fn from(v: Str) -> Child {
+        Child::Text(v)
+    }
+}
+
+impl From<String> for Child {
+    fn from(v: String) -> Child {
+        Child::Text(v.into())
+    }
+}
+
+impl From<&'static str> for Child {
+    fn from(v: &'static str) -> Child {
+        Child::Text(v.into())
+    }
+}
+
+impl From<Node> for Child {
+    fn from(v: Node) -> Child {
+        Child::Node(v)
+    }
+}

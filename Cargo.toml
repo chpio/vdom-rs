@@ -1,0 +1,7 @@
+[package]
+authors = ["Thomas Heck <t@b128.net>"]
+name = "vdom"
+version = "0.0.0"
+
+[dependencies]
+stdweb = "0.1.3"
