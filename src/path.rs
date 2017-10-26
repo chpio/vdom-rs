@@ -2,8 +2,8 @@ use std::fmt;
 use std::iter::{FromIterator, IntoIterator};
 use std::mem;
 use std::rc::Rc;
-use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
+use std::slice;
 
 #[derive(Debug, Eq, Clone)]
 pub enum Key {
@@ -110,16 +110,6 @@ impl From<Rc<Vec<u8>>> for Key {
     }
 }
 
-impl<'a, T, O> From<&'a T> for Key
-where
-    T: ToOwned<Owned = O> + ?Sized,
-    O: Borrow<T> + Into<Key>,
-{
-    default fn from(v: &'a T) -> Key {
-        v.to_owned().into()
-    }
-}
-
 impl fmt::Display for Key {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
@@ -165,7 +155,7 @@ impl Path {
         Path { path: Vec::new() }
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a Ident> {
+    pub fn iter<'a>(&'a self) -> slice::Iter<'a, Ident> {
         self.path.iter()
     }
 }

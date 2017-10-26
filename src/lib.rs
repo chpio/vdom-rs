@@ -1,5 +1,3 @@
-#![feature(specialization, conservative_impl_trait)]
-
 #[macro_use]
 extern crate stdweb;
 
