@@ -155,6 +155,10 @@ impl Path {
         Path { path: Vec::new() }
     }
 
+    pub fn len(&self) -> usize {
+        self.path.len()
+    }
+
     pub fn iter<'a>(&'a self) -> slice::Iter<'a, Ident> {
         self.path.iter()
     }

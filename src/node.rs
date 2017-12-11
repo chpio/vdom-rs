@@ -1,8 +1,11 @@
 use path::Key;
-use widget::WidgetDataTrait;
+use widget::{Widget, WidgetDataTrait};
+use event::{Listener, ListenerHolder};
 use Str;
 
+use stdweb::web::event::ConcreteEvent;
 use std::collections::HashMap;
+use std::any::TypeId;
 
 #[derive(Debug)]
 pub struct Node {
@@ -10,6 +13,7 @@ pub struct Node {
     pub children: Vec<(Option<Key>, Child)>,
     pub keyed_children: HashMap<Key, usize>,
     pub attributes: HashMap<Str, Str>,
+    pub event_listeners: HashMap<TypeId, Option<Box<Listener>>>,
 }
 
 #[derive(Debug)]
@@ -18,6 +22,7 @@ pub struct NodeBuilder {
     children: Vec<(Option<Key>, Child)>,
     keyed_children: HashMap<Key, usize>,
     attributes: HashMap<Str, Str>,
+    event_listeners: HashMap<TypeId, Option<Box<Listener>>>,
 }
 
 impl NodeBuilder {
@@ -30,6 +35,7 @@ impl NodeBuilder {
             children: Vec::new(),
             keyed_children: HashMap::new(),
             attributes: HashMap::new(),
+            event_listeners: HashMap::new(),
         }
     }
 
@@ -39,6 +45,7 @@ impl NodeBuilder {
             children: self.children,
             keyed_children: self.keyed_children,
             attributes: self.attributes,
+            event_listeners: self.event_listeners,
         }
     }
 
@@ -88,6 +95,17 @@ impl NodeBuilder {
         for (name, value) in iter {
             self.attributes.insert(name, value);
         }
+        self
+    }
+
+    pub fn add_event_listener<W, E, F>(mut self, f: F) -> NodeBuilder
+    where
+        W: 'static + Widget,
+        E: 'static + ConcreteEvent,
+        F: 'static + Fn(&mut W, &E),
+    {
+        self.event_listeners
+            .insert(TypeId::of::<E>(), Some(Box::new(ListenerHolder::new(f))));
         self
     }
 }
