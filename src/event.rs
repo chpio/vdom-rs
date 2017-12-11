@@ -3,7 +3,8 @@ use widget::Widget;
 use diff::Differ;
 
 use stdweb::web;
-use stdweb::web::event::{ConcreteEvent, EventListenerHandle};
+use stdweb::web::EventListenerHandle;
+use stdweb::web::event::ConcreteEvent;
 use stdweb::web::IEventTarget;
 use stdweb::unstable::TryInto;
 use std::collections::HashMap;
