@@ -3,5 +3,5 @@ authors = ["Thomas Heck <t@b128.net>"]
 name = "vdom"
 version = "0.0.0"
 
-[dependencies.stdweb]
-git = "https://github.com/chpio/stdweb.git"
+[dependencies]
+stdweb = "0.2.0"
