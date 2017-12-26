@@ -34,9 +34,11 @@ impl Differ {
     fn add_node(&mut self, pf: &PathFrame, index: usize, node: web::Node, node_id: Option<i32>) {
         {
             let parent = match pf.parent() {
-                Some(p) => self.nodes
-                    .get(&p.to_path())
-                    .unwrap_or_else(|| panic!("Can't find parent `{}`", p)),
+                Some(p) => {
+                    self.nodes
+                        .get(&p.to_path())
+                        .unwrap_or_else(|| panic!("Can't find parent `{}`", p))
+                }
                 None => &self.root,
             };
             js!(
@@ -214,29 +216,31 @@ fn diff_nodes(differ: &mut Differ, pf: &PathFrame, last: &mut Node, curr: &mut N
                     );
                     differ.node_reordered(&pf, index);
                 }
-                &None => match last.children.get_mut(last_index) {
-                    Some(&mut (Some(_), ref mut l)) => {
-                        let pf = pf.add_index(non_keyed_index);
-                        diff(differ, &pf, index, Some(l), Some(c));
-                        last_index += 1;
-                        non_keyed_index += 1;
-                    }
-                    Some(&mut (None, _)) => {
-                        last_index += 1;
-                        continue;
-                    }
-                    None => {
-                        for (_, &mut (ref key, ref mut c)) in curr_it {
-                            if key.is_some() {
-                                continue;
-                            }
+                &None => {
+                    match last.children.get_mut(last_index) {
+                        Some(&mut (Some(_), ref mut l)) => {
                             let pf = pf.add_index(non_keyed_index);
-                            diff(differ, &pf, 0, None, Some(c));
+                            diff(differ, &pf, index, Some(l), Some(c));
+                            last_index += 1;
                             non_keyed_index += 1;
                         }
-                        break;
+                        Some(&mut (None, _)) => {
+                            last_index += 1;
+                            continue;
+                        }
+                        None => {
+                            for (_, &mut (ref key, ref mut c)) in curr_it {
+                                if key.is_some() {
+                                    continue;
+                                }
+                                let pf = pf.add_index(non_keyed_index);
+                                diff(differ, &pf, 0, None, Some(c));
+                                non_keyed_index += 1;
+                            }
+                            break;
+                        }
                     }
-                },
+                }
             }
         }
     }
@@ -319,74 +323,80 @@ fn diff(
     curr: Option<&mut Child>,
 ) {
     match (last, curr) {
-        (Some(last), Some(curr)) => match (last, curr) {
-            (&mut Child::Node(ref mut l), &mut Child::Node(ref mut c)) => {
-                if l.ty != c.ty {
-                    node_removed(differ, pf, l);
-                    node_added(differ, pf, index, c);
-                } else {
-                    diff_nodes(differ, pf, l, c);
-                }
-            }
-            (&mut Child::Text(ref l), &mut Child::Text(ref c)) => {
-                if l.as_ref() != c {
-                    differ.text_changed(pf, c);
-                }
-            }
-            (
-                &mut Child::Widget(ref last_input, ref mut last_output),
-                &mut Child::Widget(ref curr_input, ref mut curr_output),
-            ) => {
-                assert!(last_output.is_some());
-                assert!(curr_output.is_none());
-                differ.curr_widget_path = Some(pf.to_path());
-                match curr_input.render(differ, pf, Some(&**last_input)) {
-                    Some(mut rendered) => {
-                        diff(
-                            differ,
-                            pf,
-                            index,
-                            last_output.as_mut().map(|o| &mut **o),
-                            Some(&mut rendered),
-                        );
-                    }
-                    None => {
-                        *curr_output = mem::replace(last_output, None);
+        (Some(last), Some(curr)) => {
+            match (last, curr) {
+                (&mut Child::Node(ref mut l), &mut Child::Node(ref mut c)) => {
+                    if l.ty != c.ty {
+                        node_removed(differ, pf, l);
+                        node_added(differ, pf, index, c);
+                    } else {
+                        diff_nodes(differ, pf, l, c);
                     }
                 }
+                (&mut Child::Text(ref l), &mut Child::Text(ref c)) => {
+                    if l.as_ref() != c {
+                        differ.text_changed(pf, c);
+                    }
+                }
+                (
+                    &mut Child::Widget(ref last_input, ref mut last_output),
+                    &mut Child::Widget(ref curr_input, ref mut curr_output),
+                ) => {
+                    assert!(last_output.is_some());
+                    assert!(curr_output.is_none());
+                    differ.curr_widget_path = Some(pf.to_path());
+                    match curr_input.render(differ, pf, Some(&**last_input)) {
+                        Some(mut rendered) => {
+                            diff(
+                                differ,
+                                pf,
+                                index,
+                                last_output.as_mut().map(|o| &mut **o),
+                                Some(&mut rendered),
+                            );
+                        }
+                        None => {
+                            *curr_output = mem::replace(last_output, None);
+                        }
+                    }
+                }
+                (ref mut last, ref mut curr) => {
+                    diff(differ, pf, index, Some(last), None);
+                    diff(differ, pf, index, None, Some(curr));
+                }
             }
-            (ref mut last, ref mut curr) => {
-                diff(differ, pf, index, Some(last), None);
-                diff(differ, pf, index, None, Some(curr));
-            }
-        },
+        }
 
         // add
-        (None, Some(curr)) => match curr {
-            &mut Child::Node(ref mut c) => node_added(differ, pf, index, c),
-            &mut Child::Text(ref c) => differ.text_added(pf, index, c.as_ref()),
-            &mut Child::Widget(ref input, ref mut output) => {
-                assert!(output.is_none());
-                differ.curr_widget_path = Some(pf.to_path());
-                let mut rendered = input.render(differ, pf, None).unwrap();
-                diff(differ, pf, index, None, Some(&mut rendered));
-                *output = Some(Box::new(rendered));
+        (None, Some(curr)) => {
+            match curr {
+                &mut Child::Node(ref mut c) => node_added(differ, pf, index, c),
+                &mut Child::Text(ref c) => differ.text_added(pf, index, c.as_ref()),
+                &mut Child::Widget(ref input, ref mut output) => {
+                    assert!(output.is_none());
+                    differ.curr_widget_path = Some(pf.to_path());
+                    let mut rendered = input.render(differ, pf, None).unwrap();
+                    diff(differ, pf, index, None, Some(&mut rendered));
+                    *output = Some(Box::new(rendered));
+                }
+                &mut Child::Tombstone => panic!("curr is a tombstone `{}`", pf),
             }
-            &mut Child::Tombstone => panic!("curr is a tombstone `{}`", pf),
-        },
+        }
 
         // remove
-        (Some(last), None) => match last {
-            &mut Child::Node(ref mut l) => node_removed(differ, pf, l),
-            &mut Child::Text(_) => differ.text_removed(pf),
-            &mut Child::Widget(ref input, ref mut output) => {
-                differ.curr_widget_path = Some(pf.to_path());
-                let output = output.as_mut().unwrap();
-                diff(differ, pf, index, Some(&mut *output), None);
-                input.remove(differ, pf);
+        (Some(last), None) => {
+            match last {
+                &mut Child::Node(ref mut l) => node_removed(differ, pf, l),
+                &mut Child::Text(_) => differ.text_removed(pf),
+                &mut Child::Widget(ref input, ref mut output) => {
+                    differ.curr_widget_path = Some(pf.to_path());
+                    let output = output.as_mut().unwrap();
+                    diff(differ, pf, index, Some(&mut *output), None);
+                    input.remove(differ, pf);
+                }
+                &mut Child::Tombstone => panic!("last is a tombstone `{}`", pf),
             }
-            &mut Child::Tombstone => panic!("last is a tombstone `{}`", pf),
-        },
+        }
 
         (None, None) => {}
     }

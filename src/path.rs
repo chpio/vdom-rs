@@ -56,8 +56,6 @@ impl PartialEq for Key {
     }
 }
 
-
-
 macro_rules! impl_from_int_for_key {
     ($tyu:ty, $tyi:ty) => {
         impl From<$tyu> for Key {
