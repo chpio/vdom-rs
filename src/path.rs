@@ -3,7 +3,6 @@ use std::iter::{FromIterator, IntoIterator};
 use std::mem;
 use std::rc::Rc;
 use std::hash::{Hash, Hasher};
-use std::slice;
 
 #[derive(Debug, Eq, Clone)]
 pub enum Key {
@@ -143,39 +142,35 @@ impl fmt::Display for Ident {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct Path {
-    path: Vec<Ident>,
+#[derive(Debug, Clone)]
+pub enum PathRef<'a> {
+    Path(&'a Path),
+    PathFrame(&'a PathFrame<'a>),
 }
 
-impl Path {
-    pub fn new() -> Path {
-        Path { path: Vec::new() }
-    }
-
-    pub fn len(&self) -> usize {
-        self.path.len()
-    }
-
-    pub fn iter<'a>(&'a self) -> slice::Iter<'a, Ident> {
-        self.path.iter()
-    }
-}
-
-impl FromIterator<Ident> for Path {
-    fn from_iter<T>(iter: T) -> Self
-    where
-        T: IntoIterator<Item = Ident>,
-    {
-        Path {
-            path: iter.into_iter().collect(),
+impl <'a> PathRef<'a> {
+    pub fn parent(&self) -> Option<PathRef<'a>> {
+        match self {
+            &PathRef::Path(p) => p.parent().map(|p| p.into()),
+            &PathRef::PathFrame(pf) => pf.parent(),
         }
     }
+
+    pub fn ident(&self) -> &'a Ident {
+        match self {
+            &PathRef::Path(p) => p.ident(),
+            &PathRef::PathFrame(pf) => pf.ident(),
+        }
+    }
+
+    pub fn iter(&self) -> PathRefIter<'a> {
+        PathRefIter(Some(self.clone()))
+    }
 }
 
-impl fmt::Display for Path {
+impl <'a> fmt::Display for PathRef<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for (i, e) in self.path.iter().enumerate() {
+        for (i, e) in self.iter().map(|p| p.ident()).enumerate() {
             if 0 < i {
                 write!(f, ".")?;
             }
@@ -185,9 +180,108 @@ impl fmt::Display for Path {
     }
 }
 
+impl <'a> From<&'a Path> for PathRef<'a> {
+    fn from(path: &'a Path) -> Self {
+        PathRef::Path(path)
+    }
+}
+
+impl <'a> From<&'a PathFrame<'a>> for PathRef<'a> {
+    fn from(path: &'a PathFrame<'a>) -> Self {
+        PathRef::PathFrame(path)
+    }
+}
+
+pub struct PathRefIter<'a>(Option<PathRef<'a>>);
+
+impl<'a> Iterator for PathRefIter<'a> {
+    type Item = PathRef<'a>;
+
+    fn next(&mut self) -> Option<PathRef<'a>> {
+        let next = self.0.as_ref().and_then(|pf| pf.parent());
+        mem::replace(&mut self.0, next)
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Hash)]
+struct PathIntern {
+    parent: Option<Path>,
+    ident: Ident,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct Path(Rc<PathIntern>);
+
+impl Path {
+    pub fn new(parent: Option<Path>, ident: Ident) -> Path {
+        Path(Rc::new(PathIntern {
+            parent: parent,
+            ident: ident,
+        }))
+    }
+
+    pub fn parent(&self) -> Option<&Path> {
+        self.0.parent.as_ref()
+    }
+
+    pub fn ident(&self) -> &Ident {
+        &self.0.ident
+    }
+
+    pub fn iter<'a>(&'a self) -> PathIter<'a> {
+        PathIter(Some(self))
+    }
+}
+
+impl fmt::Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        Into::<PathRef>::into(self).fmt(f)
+    }
+}
+
+pub struct PathIter<'a>(Option<&'a Path>);
+
+impl<'a> Iterator for PathIter<'a> {
+    type Item = &'a Path;
+
+    fn next(&mut self) -> Option<&'a Path> {
+        let next = self.0.as_ref().and_then(|pf| pf.parent());
+        mem::replace(&mut self.0, next)
+    }
+}
+
+impl FromIterator<Ident> for Option<Path> {
+    fn from_iter<T>(iter: T) -> Option<Path>
+    where
+        T: IntoIterator<Item = Ident>,
+    {
+        let mut parent = None;
+        for ident in iter.into_iter() {
+            parent = Some(Path::new(parent.take(), ident));
+        }
+        parent
+    }
+}
+
+impl <'a> From<&'a PathRef<'a>> for &'a Path {
+    fn from(pr: &'a PathRef<'a>) -> &'a Path {
+        match pr {
+            &PathRef::Path(ref p) => p,
+            &PathRef::PathFrame(ref pf) => pf.path(),
+        }
+    }
+}
+
+impl <'a> From<&'a PathRef<'a>> for Path {
+    fn from(pr: &'a PathRef<'a>) -> Path {
+        Into::<&'a Path>::into(pr).clone()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PathFrame<'a> {
-    parent: Option<&'a PathFrame<'a>>,
+    parent: Option<PathRef<'a>>,
+    path: Option<Path>,
     ident: Ident,
 }
 
@@ -195,63 +289,56 @@ impl<'a> PathFrame<'a> {
     pub fn new() -> PathFrame<'a> {
         PathFrame {
             parent: None,
+            path: None,
             ident: Ident::Key("".into()),
         }
     }
 
     pub fn add_key(&'a self, key: Key) -> PathFrame<'a> {
         PathFrame {
-            parent: Some(self),
+            parent: Some(self.into()),
+            path: None,
             ident: Ident::Key(key),
         }
     }
 
     pub fn add_index(&'a self, index: usize) -> PathFrame<'a> {
         PathFrame {
-            parent: Some(self),
+            parent: Some(self.into()),
+            path: None,
             ident: Ident::Index(index),
         }
     }
 
-    pub fn parent(&'a self) -> Option<&'a PathFrame<'a>> {
-        self.parent.as_ref().map(|pf| *pf)
+    pub fn parent(&'a self) -> Option<PathRef<'a>> {
+        self.parent.as_ref().cloned()
     }
 
     pub fn ident(&self) -> &Ident {
         &self.ident
     }
 
-    pub fn iter(&'a self) -> PathFrameIter<'a> {
-        PathFrameIter(Some(self))
+    pub fn iter(&'a self) -> PathRefIter<'a> {
+        Into::<PathRef>::into(self).iter()
     }
 
-    pub fn to_path(&self) -> Path {
-        self.iter().map(|ident| ident.clone()).collect()
+    pub fn path(&self) -> &Path {
+        if let Some(ref path) = self.path {
+            path
+        } else {
+            let parent_path = self.parent.as_ref().map(|p| p.into());
+            let path = Path::new(parent_path, self.ident.clone());
+            unsafe {
+                let mut_path = &self.path as *const _ as *mut _;
+                *mut_path = Some(path);
+            }
+            self.path.as_ref().unwrap()
+        }
     }
 }
 
 impl<'a> fmt::Display for PathFrame<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for (i, e) in self.iter().enumerate() {
-            if 0 < i {
-                write!(f, ".")?;
-            }
-            write!(f, "{}", e)?;
-        }
-        Ok(())
-    }
-}
-
-pub struct PathFrameIter<'a>(Option<&'a PathFrame<'a>>);
-
-impl<'a> Iterator for PathFrameIter<'a> {
-    type Item = &'a Ident;
-
-    fn next(&mut self) -> Option<&'a Ident> {
-        let next = match self.0 {
-            Some(ref pf) => pf.parent(),
-            None => None,
-        };
-        mem::replace(&mut self.0, next).map(|pf| pf.ident())
+        Into::<PathRef>::into(self).fmt(f)
     }
 }
