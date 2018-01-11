@@ -4,4 +4,4 @@ name = "vdom"
 version = "0.0.0"
 
 [dependencies]
-stdweb = "0.2.0"
+stdweb = "0.3.0"

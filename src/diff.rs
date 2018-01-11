@@ -1,40 +1,70 @@
 use {Child, Node};
-use path::{Path, PathFrame};
+use path::{self, Path, PathFrame};
 use event::ListenerManager;
+use widget::WidgetHolderTrait;
 
 use std::collections::HashMap;
-use std::any::Any;
 use std::mem;
-use stdweb::web::{self, document};
+use std::rc::{Rc, Weak};
+use std::cell::RefCell;
+use std::boxed::FnBox;
+use stdweb::web::{self, document, window, RequestAnimationFrameHandle};
 
-#[derive(Debug)]
 pub struct Differ {
+    last: Option<Child>,
+    raf: Option<RequestAnimationFrameHandle>,
+    pub ctx: Option<Weak<RefCell<Differ>>>,
     pub root: web::Node,
     nodes: HashMap<Path, web::Node>,
     curr_widget_path: Option<Path>,
-    pub widget_holders: HashMap<Path, Box<Any>>,
+    pub widget_holders: HashMap<Path, Box<WidgetHolderTrait>>,
     pub node_id_to_path: HashMap<i32, Path>,
     next_node_id: i32,
     pub listener_manager: ListenerManager,
+    schedule_queue: Vec<Box<FnBox(&mut Differ)>>,
 }
 
 impl Differ {
-    fn new(root: web::Node) -> Differ {
-        Differ {
-            root: root,
-            nodes: HashMap::new(),
-            curr_widget_path: None,
-            widget_holders: HashMap::new(),
-            node_id_to_path: HashMap::new(),
-            next_node_id: i32::min_value(),
-            listener_manager: ListenerManager::new(),
+    pub fn schedule<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut Differ) + 'static,
+    {
+        self.schedule_queue.push(Box::new(f));
+
+        if self.raf.is_none() {
+            let ctx = self.ctx.as_ref().unwrap().clone();
+            self.raf = Some(window().request_animation_frame(move |_| {
+                let differ = ctx.upgrade().unwrap();
+                let mut differ = differ.borrow_mut();
+                differ.raf = None;
+                let mut queue = mem::replace(&mut differ.schedule_queue, Vec::new());
+                for f in queue.drain(..) {
+                    f.call_box((&mut *differ,));
+                }
+                differ.schedule_queue = queue;
+
+                let mut last_tree = differ.last.take().expect("last was None");
+                while let Some((path, mut rendered)) = differ
+                    .widget_holders
+                    .iter_mut()
+                    .filter(|&(_, ref widget_holder)| widget_holder.should_rerender())
+                    .min_by_key(|&(ref path, _)| path.len())
+                    .map(|(path, widget_holder)| (path.clone(), widget_holder.render()))
+                {
+                    traverse_path(&mut last_tree, path, |index, pf, child| {
+                        diff(&mut *differ, pf, index, Some(child), Some(&mut rendered));
+                        *child = rendered;
+                    });
+                }
+                differ.last = Some(last_tree);
+            }));
         }
     }
 
     fn add_node(&mut self, pf: &PathFrame, index: usize, node: web::Node, node_id: Option<i32>) {
         {
             let parent = match pf.parent() {
-                Some(p) => {
+                Some(ref p) => {
                     self.nodes
                         .get(&p.to_path())
                         .unwrap_or_else(|| panic!("Can't find parent `{}`", p))
@@ -47,7 +77,7 @@ impl Differ {
                 var node = @{&node};
                 var nodeId = @{node_id};
                 if (nodeId) {
-                    node.__vdom_node_id = nodeId;
+                    node.__vdomNodeId = nodeId;
                 }
                 parent.insertBefore(node, parent.childNodes[@{index as i32}] || null);
             );
@@ -129,27 +159,40 @@ impl Differ {
 }
 
 pub struct Context {
-    differ: Differ,
-    last: Option<Child>,
+    pub differ: Rc<RefCell<Differ>>,
 }
 
 impl Context {
     pub fn new(root: web::Node) -> Context {
-        Context {
-            differ: Differ::new(root),
+        let differ = Differ {
+            raf: None,
             last: None,
-        }
+            ctx: None,
+            root: root,
+            nodes: HashMap::new(),
+            curr_widget_path: None,
+            widget_holders: HashMap::new(),
+            node_id_to_path: HashMap::new(),
+            next_node_id: i32::min_value(),
+            listener_manager: ListenerManager::new(),
+            schedule_queue: Vec::new(),
+        };
+
+        let rc = Rc::new(RefCell::new(differ));
+        rc.borrow_mut().ctx = Some(Rc::downgrade(&rc));
+        Context { differ: rc }
     }
 
-    pub fn update(&mut self, mut curr: Child) {
-        diff(
-            &mut self.differ,
-            &PathFrame::new(),
-            0,
-            self.last.as_mut(),
-            Some(&mut curr),
-        );
-        self.last = Some(curr);
+    pub fn get(&self) -> &RefCell<Differ> {
+        &*self.differ
+    }
+
+    pub fn start(&mut self, mut curr: Child) {
+        self.differ.borrow_mut().schedule(move |differ| {
+            let mut last = differ.last.take();
+            diff(differ, &PathFrame::new(), 0, last.as_mut(), Some(&mut curr));
+            differ.last = Some(curr);
+        });
     }
 }
 
@@ -339,13 +382,14 @@ fn diff(
                     }
                 }
                 (
-                    &mut Child::Widget(ref last_input, ref mut last_output),
-                    &mut Child::Widget(ref curr_input, ref mut curr_output),
+                    &mut Child::Widget(_, ref mut last_output),
+                    &mut Child::Widget(ref mut curr_input, ref mut curr_output),
                 ) => {
+                    // TODO: check for eq widget type
                     assert!(last_output.is_some());
                     assert!(curr_output.is_none());
                     differ.curr_widget_path = Some(pf.to_path());
-                    match curr_input.render(differ, pf, Some(&**last_input)) {
+                    match curr_input.try_render(differ, pf.to_path()) {
                         Some(mut rendered) => {
                             diff(
                                 differ,
@@ -356,7 +400,7 @@ fn diff(
                             );
                         }
                         None => {
-                            *curr_output = mem::replace(last_output, None);
+                            *curr_output = last_output.take();
                         }
                     }
                 }
@@ -372,10 +416,10 @@ fn diff(
             match curr {
                 &mut Child::Node(ref mut c) => node_added(differ, pf, index, c),
                 &mut Child::Text(ref c) => differ.text_added(pf, index, c.as_ref()),
-                &mut Child::Widget(ref input, ref mut output) => {
+                &mut Child::Widget(ref mut input, ref mut output) => {
                     assert!(output.is_none());
                     differ.curr_widget_path = Some(pf.to_path());
-                    let mut rendered = input.render(differ, pf, None).unwrap();
+                    let mut rendered = input.try_render(differ, pf.to_path()).unwrap();
                     diff(differ, pf, index, None, Some(&mut rendered));
                     *output = Some(Box::new(rendered));
                 }
@@ -392,12 +436,70 @@ fn diff(
                     differ.curr_widget_path = Some(pf.to_path());
                     let output = output.as_mut().unwrap();
                     diff(differ, pf, index, Some(&mut *output), None);
-                    input.remove(differ, pf);
+                    input.remove(differ, &pf.to_path());
                 }
                 &mut Child::Tombstone => panic!("last is a tombstone `{}`", pf),
             }
         }
 
         (None, None) => {}
+    }
+}
+
+fn traverse_path<F, P>(child: &mut Child, path: P, f: F)
+where
+    F: FnOnce(usize, &PathFrame, &mut Child),
+    P: AsRef<[path::Ident]>,
+{
+    traverse_path_(child, 0, &PathFrame::new(), &path.as_ref()[1..], f);
+}
+
+fn traverse_path_<F>(child: &mut Child, index: usize, pf: &PathFrame, path: &[path::Ident], f: F)
+where
+    F: FnOnce(usize, &PathFrame, &mut Child),
+{
+    if let &mut Child::Widget(_, ref mut child) = child {
+        traverse_path_(
+            child.as_mut().expect("child not rendered"),
+            index,
+            &pf,
+            path,
+            f,
+        );
+        return;
+    }
+    if let Some((ident, leftover)) = path.split_first() {
+        let pf = pf.add_ident(ident.clone());
+        match child {
+            &mut Child::Node(ref mut node) => {
+                let index_child = match ident {
+                    &path::Ident::Key(ref key) => {
+                        let index = *node.keyed_children.get(key).expect("node key not found");
+                        let child = &mut node.children
+                            .get_mut(index)
+                            .expect("node not found by index")
+                            .1;
+                        (index, child)
+                    }
+                    &path::Ident::Index(non_keyed_index) => {
+                        node.children
+                            .iter_mut()
+                            .enumerate()
+                            .filter(|&(_, &mut (ref key, _))| key.is_none())
+                            .enumerate()
+                            .find(|&(curr_non_keyed_index, _)| {
+                                curr_non_keyed_index == non_keyed_index
+                            })
+                            .map(|(_, (index, &mut (_, ref mut child)))| (index, child))
+                            .expect("node not found by index")
+                    }
+                };
+
+                traverse_path_(index_child.1, index_child.0, &pf, leftover, f);
+            }
+            &mut Child::Text(..) | &mut Child::Tombstone | &mut Child::Widget(..) => unreachable!(),
+        }
+    } else {
+        f(index, pf, child);
     }
 }

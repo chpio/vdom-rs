@@ -1,6 +1,8 @@
 use path::Path;
 use widget::Widget;
 use diff::Differ;
+// use widget::WidgetHolder;
+use widget::WidgetHolderTrait;
 
 use stdweb::web;
 use stdweb::web::EventListenerHandle;
@@ -12,8 +14,8 @@ use std::any::{Any, TypeId};
 use std::ops::Fn;
 use std::marker::PhantomData;
 use std::fmt;
+use std::rc::Weak;
 use std::cell::RefCell;
-use std::rc::Rc;
 
 pub struct ListenerHolder<W, E, F>
 where
@@ -54,13 +56,9 @@ where
 }
 
 pub trait Listener: fmt::Debug {
-    fn call(&self, widget: &mut Any, event: &Any);
+    fn call(&self, widget: &mut WidgetHolderTrait, event: &Any);
     fn event_type_id(&self) -> TypeId;
-    fn register_root(
-        &self,
-        root: &web::Node,
-        queue: Rc<RefCell<Vec<(i32, TypeId, Box<Any>)>>>,
-    ) -> EventListenerHandle;
+    fn register_root(&self, root: &web::Node, ctx: Weak<RefCell<Differ>>) -> EventListenerHandle;
 }
 
 impl<W, E, F> Listener for ListenerHolder<W, E, F>
@@ -69,29 +67,37 @@ where
     E: 'static + ConcreteEvent,
     F: 'static + Fn(&mut W, &E),
 {
-    fn call(&self, widget: &mut Any, event: &Any) {
-        let widget = widget.downcast_mut().unwrap();
-        let event = *event.downcast_ref().unwrap();
-        (self.listener)(widget, event);
+    fn call(&self, widget_holder: &mut WidgetHolderTrait, event: &Any) {
+        let widget_holder = widget_holder.downcast_mut::<W>().unwrap();
+        widget_holder.is_dirty = true;
+        let event = event.downcast_ref().unwrap();
+        (self.listener)(&mut widget_holder.curr_widget, event);
     }
 
     fn event_type_id(&self) -> TypeId {
         TypeId::of::<E>()
     }
 
-    fn register_root(
-        &self,
-        root: &web::Node,
-        queue: Rc<RefCell<Vec<(i32, TypeId, Box<Any>)>>>,
-    ) -> EventListenerHandle {
+    fn register_root(&self, root: &web::Node, ctx: Weak<RefCell<Differ>>) -> EventListenerHandle {
         root.add_event_listener(move |event: E| {
-            let node_id: i32 = js!(
-                return @{event.as_ref()}.target.__vdom_node_id;
-            ).try_into()
-                .unwrap();
-            queue
-                .borrow_mut()
-                .push((node_id, TypeId::of::<E>(), Box::new(event)));
+            let ctx = ctx.upgrade().unwrap();
+            ctx.borrow_mut().schedule(move |differ| {
+                let node_id: i32 = js!(
+                    return @{event.as_ref()}.target.__vdomNodeId;
+                ).try_into()
+                    .unwrap();
+                let path = differ.node_id_to_path.get(&node_id).unwrap();
+                let listener_manager = &differ.listener_manager;
+                for len in 0..path.len() + 1 {
+                    let path = path.iter().take(len).cloned().collect();
+                    if let Some(&(ref widget_path, ref listener)) =
+                        listener_manager.listeners.get(&(path, TypeId::of::<E>()))
+                    {
+                        let widget_holder = differ.widget_holders.get_mut(widget_path).unwrap();
+                        listener.call(&mut **widget_holder, &event);
+                    }
+                }
+            });
         })
     }
 }
@@ -100,7 +106,6 @@ where
 pub struct ListenerManager {
     root_listeners: HashMap<TypeId, (usize, EventListenerHandle)>,
     listeners: HashMap<(Path, TypeId), (Path, Box<Listener>)>,
-    queue: Rc<RefCell<Vec<(i32, TypeId, Box<Any>)>>>,
 }
 
 impl ListenerManager {
@@ -108,24 +113,6 @@ impl ListenerManager {
         ListenerManager {
             root_listeners: HashMap::new(),
             listeners: HashMap::new(),
-            queue: Rc::new(RefCell::new(Vec::new())),
-        }
-    }
-
-    pub fn handle_events(differ: &mut Differ) {
-        let listener_manager = &differ.listener_manager;
-        let mut queue = listener_manager.queue.borrow_mut();
-        for (node_id, event_type_id, event) in queue.drain(..) {
-            let path = differ.node_id_to_path.get(&node_id).unwrap();
-            for len in 0..path.len() {
-                let path = path.iter().take(len).cloned().collect();
-                if let Some(&(ref widget_path, ref listener)) =
-                    listener_manager.listeners.get(&(path, event_type_id))
-                {
-                    let widget = differ.widget_holders.get_mut(widget_path).unwrap();
-                    listener.call(widget, &*event);
-                }
-            }
         }
     }
 
@@ -142,7 +129,8 @@ impl ListenerManager {
                     Vacant(ve) => {
                         ve.insert((
                             1,
-                            listener.register_root(&differ.root, listener_manager.queue.clone()),
+                            listener
+                                .register_root(&differ.root, differ.ctx.as_ref().unwrap().clone()),
                         ));
                     }
                 }

@@ -1,5 +1,5 @@
 use path::Key;
-use widget::{Widget, WidgetDataTrait};
+use widget::{Widget, WidgetData, WidgetDataTrait};
 use event::{Listener, ListenerHolder};
 use Str;
 
@@ -69,14 +69,19 @@ impl NodeBuilder {
         self
     }
 
-    pub fn add_children<I>(mut self, iter: I) -> NodeBuilder
+    pub fn add_children<I>(self, iter: I) -> NodeBuilder
     where
         I: IntoIterator<Item = (Option<Key>, Child)>,
     {
+        let mut this = self;
         for (key, child) in iter {
-            self.children.push((key, child));
+            if let Some(key) = key {
+                this = this.add_keyed_child(key, child);
+            } else {
+                this = this.add_child(child);
+            }
         }
-        self
+        this
     }
 
     pub fn add_attribute<N, V>(mut self, name: N, value: V) -> NodeBuilder
@@ -139,5 +144,14 @@ impl From<&'static str> for Child {
 impl From<Node> for Child {
     fn from(v: Node) -> Child {
         Child::Node(v)
+    }
+}
+
+impl<W> From<WidgetData<W>> for Child
+where
+    W: Widget + 'static,
+{
+    fn from(v: WidgetData<W>) -> Child {
+        Child::Widget(Box::new(v), None)
     }
 }

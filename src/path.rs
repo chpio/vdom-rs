@@ -173,6 +173,12 @@ impl FromIterator<Ident> for Path {
     }
 }
 
+impl AsRef<[Ident]> for Path {
+    fn as_ref(&self) -> &[Ident] {
+        &self.path[..]
+    }
+}
+
 impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for (i, e) in self.path.iter().enumerate() {
@@ -199,18 +205,19 @@ impl<'a> PathFrame<'a> {
         }
     }
 
-    pub fn add_key(&'a self, key: Key) -> PathFrame<'a> {
+    pub fn add_ident(&'a self, ident: Ident) -> PathFrame<'a> {
         PathFrame {
             parent: Some(self),
-            ident: Ident::Key(key),
+            ident: ident,
         }
     }
 
+    pub fn add_key(&'a self, key: Key) -> PathFrame<'a> {
+        self.add_ident(Ident::Key(key))
+    }
+
     pub fn add_index(&'a self, index: usize) -> PathFrame<'a> {
-        PathFrame {
-            parent: Some(self),
-            ident: Ident::Index(index),
-        }
+        self.add_ident(Ident::Index(index))
     }
 
     pub fn parent(&'a self) -> Option<&'a PathFrame<'a>> {
