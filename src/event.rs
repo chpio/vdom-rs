@@ -88,8 +88,8 @@ where
                     .unwrap();
                 let path = differ.node_id_to_path.get(&node_id).unwrap();
                 let listener_manager = &differ.listener_manager;
-                for len in 0..path.len() + 1 {
-                    let path = path.iter().take(len).cloned().collect();
+                for len in (0..path.len()).rev() {
+                    let path = path.iter().skip(len).cloned().collect();
                     if let Some(&(ref widget_path, ref listener)) =
                         listener_manager.listeners.get(&(path, TypeId::of::<E>()))
                     {

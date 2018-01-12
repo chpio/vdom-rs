@@ -410,7 +410,7 @@ where
     F: FnOnce(usize, &PathFrame, &mut Child),
     P: AsRef<[Ident]>,
 {
-    traverse_path_(child, 0, &PathFrame::new(), &path.as_ref()[1..], f);
+    traverse_path_(child, 0, &PathFrame::new(), path.as_ref().split_last().unwrap().1, f);
 }
 
 fn traverse_path_<F>(child: &mut Child, index: usize, pf: &PathFrame, path: &[Ident], f: F)
@@ -427,7 +427,7 @@ where
         );
         return;
     }
-    if let Some((ident, leftover)) = path.split_first() {
+    if let Some((ident, leftover)) = path.split_last() {
         let pf = pf.add_ident(ident.clone());
         match child {
             &mut Child::Node(ref mut node) => {
