@@ -15,6 +15,7 @@ pub use node::{Child, ChildBuilder, Node, NodeBuilder};
 mod path;
 
 pub mod widget;
+pub use widget::Widget;
 
 use std::borrow::Cow;
 
