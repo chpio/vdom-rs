@@ -384,7 +384,6 @@ fn diff(
                     diff(differ, pf, index, None, Some(&mut rendered));
                     *output = Some(Box::new(rendered));
                 }
-                &mut Child::Tombstone => panic!("curr is a tombstone `{}`", pf),
             }
         }
 
@@ -399,7 +398,6 @@ fn diff(
                     diff(differ, pf, index, Some(&mut *output), None);
                     input.remove(differ, &pf.to_path());
                 }
-                &mut Child::Tombstone => panic!("last is a tombstone `{}`", pf),
             }
         }
 
@@ -449,7 +447,7 @@ where
                     .1;
                 traverse_path_(child, index, &pf, leftover, f);
             }
-            &mut Child::Text(..) | &mut Child::Tombstone | &mut Child::Widget(..) => unreachable!(),
+            &mut Child::Text(..) | &mut Child::Widget(..) => unreachable!(),
         }
     } else {
         f(index, pf, child);

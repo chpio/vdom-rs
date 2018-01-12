@@ -143,7 +143,6 @@ pub enum Child {
     Text(Str),
     Node(Node),
     Widget(Box<WidgetDataTrait>, Option<Box<Child>>),
-    Tombstone,
 }
 
 impl<W> From<ChildBuilder<W>> for Child
@@ -155,7 +154,6 @@ where
             ChildBuilder::Text(string) => Child::Text(string),
             ChildBuilder::Node(node, _) => Child::Node(node),
             ChildBuilder::Widget(widget_data, child) => Child::Widget(widget_data, child),
-            ChildBuilder::Tombstone => Child::Tombstone,
         }
     }
 }
@@ -165,7 +163,6 @@ pub enum ChildBuilder<W> {
     Text(Str),
     Node(Node, PhantomData<W>),
     Widget(Box<WidgetDataTrait>, Option<Box<Child>>),
-    Tombstone,
 }
 
 impl<W> From<Str> for ChildBuilder<W>
