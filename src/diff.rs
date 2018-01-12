@@ -1,7 +1,7 @@
-use {Child, Node};
+use {Child, ChildBuilder, Node};
 use path::{Ident, Path, PathFrame};
 use event::ListenerManager;
-use widget::WidgetHolderTrait;
+use widget::{Widget, WidgetData, WidgetHolderTrait};
 
 use std::collections::HashMap;
 use std::mem;
@@ -187,9 +187,14 @@ impl Context {
         &*self.differ
     }
 
-    pub fn start(&mut self, mut curr: Child) {
+    pub fn update<W>(&mut self, input: W::Input)
+    where
+        W: 'static + Widget,
+    {
         self.differ.borrow_mut().schedule(move |differ| {
             let mut last = differ.last.take();
+            let curr: ChildBuilder<W> = WidgetData::<W>::new(input).into();
+            let mut curr = curr.into();
             diff(differ, &PathFrame::new(), 0, last.as_mut(), Some(&mut curr));
             differ.last = Some(curr);
         });

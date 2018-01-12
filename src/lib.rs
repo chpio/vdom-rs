@@ -10,7 +10,7 @@ pub use diff::Context;
 mod event;
 
 mod node;
-pub use node::{Child, Node, NodeBuilder};
+pub use node::{Child, ChildBuilder, Node, NodeBuilder};
 
 mod path;
 

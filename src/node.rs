@@ -6,6 +6,7 @@ use Str;
 use stdweb::web::event::ConcreteEvent;
 use std::collections::HashMap;
 use std::any::TypeId;
+use std::marker::PhantomData;
 
 #[derive(Debug)]
 pub struct Node {
@@ -18,17 +19,24 @@ pub struct Node {
 }
 
 #[derive(Debug)]
-pub struct NodeBuilder {
+pub struct NodeBuilder<W>
+where
+    W: 'static + Widget,
+{
     ty: Str,
     children: Vec<(Ident, Child)>,
     keyed_children: HashMap<Key, usize>,
     non_keyed_children: Vec<usize>,
     attributes: HashMap<Str, Str>,
     event_listeners: HashMap<TypeId, Option<Box<Listener>>>,
+    pd: PhantomData<W>,
 }
 
-impl NodeBuilder {
-    pub fn new<T>(ty: T) -> NodeBuilder
+impl<W> NodeBuilder<W>
+where
+    W: 'static + Widget,
+{
+    pub fn new<T>(ty: T) -> NodeBuilder<W>
     where
         T: Into<Str>,
     {
@@ -39,48 +47,39 @@ impl NodeBuilder {
             non_keyed_children: Vec::new(),
             attributes: HashMap::new(),
             event_listeners: HashMap::new(),
+            pd: PhantomData,
         }
     }
 
-    pub fn build(self) -> Node {
-        Node {
-            ty: self.ty,
-            children: self.children,
-            keyed_children: self.keyed_children,
-            non_keyed_children: self.non_keyed_children,
-            attributes: self.attributes,
-            event_listeners: self.event_listeners,
-        }
-    }
-
-    pub fn add_child<C>(mut self, child: C) -> NodeBuilder
+    pub fn add_child<C>(mut self, child: C) -> NodeBuilder<W>
     where
-        C: Into<Child>,
+        C: Into<ChildBuilder<W>>,
     {
-        let child = child.into();
+        let child = child.into().into();
         let index = self.children.len();
         let non_keyed_index = self.non_keyed_children.len();
         self.non_keyed_children.push(index);
-        self.children.push((Ident::NonKeyedIndex(non_keyed_index), child));
+        self.children
+            .push((Ident::NonKeyedIndex(non_keyed_index), child));
         self
     }
 
-    pub fn add_keyed_child<K, C>(mut self, key: K, child: C) -> NodeBuilder
+    pub fn add_keyed_child<K, C>(mut self, key: K, child: C) -> NodeBuilder<W>
     where
         K: Into<Key>,
-        C: Into<Child>,
+        C: Into<ChildBuilder<W>>,
     {
         let key = key.into();
-        let child = child.into();
+        let child = child.into().into();
         let index = self.children.len();
         self.keyed_children.insert(key.clone(), index);
         self.children.push((Ident::Key(key), child));
         self
     }
 
-    pub fn add_children<I>(self, iter: I) -> NodeBuilder
+    pub fn add_children<I>(self, iter: I) -> NodeBuilder<W>
     where
-        I: IntoIterator<Item = (Option<Key>, Child)>,
+        I: IntoIterator<Item = (Option<Key>, ChildBuilder<W>)>,
     {
         let mut this = self;
         for (key, child) in iter {
@@ -93,7 +92,7 @@ impl NodeBuilder {
         this
     }
 
-    pub fn add_attribute<N, V>(mut self, name: N, value: V) -> NodeBuilder
+    pub fn add_attribute<N, V>(mut self, name: N, value: V) -> NodeBuilder<W>
     where
         N: Into<Str>,
         V: Into<Str>,
@@ -102,7 +101,7 @@ impl NodeBuilder {
         self
     }
 
-    pub fn add_attributes<I>(mut self, iter: I) -> NodeBuilder
+    pub fn add_attributes<I>(mut self, iter: I) -> NodeBuilder<W>
     where
         I: IntoIterator<Item = (Str, Str)>,
     {
@@ -112,15 +111,30 @@ impl NodeBuilder {
         self
     }
 
-    pub fn add_event_listener<W, E, F>(mut self, f: F) -> NodeBuilder
+    pub fn add_event_listener<E, F>(mut self, f: F) -> NodeBuilder<W>
     where
-        W: 'static + Widget,
         E: 'static + ConcreteEvent,
         F: 'static + Fn(&mut W, &E),
     {
         self.event_listeners
             .insert(TypeId::of::<E>(), Some(Box::new(ListenerHolder::new(f))));
         self
+    }
+}
+
+impl<W> From<NodeBuilder<W>> for Node
+where
+    W: 'static + Widget,
+{
+    fn from(nb: NodeBuilder<W>) -> Node {
+        Node {
+            ty: nb.ty,
+            children: nb.children,
+            keyed_children: nb.keyed_children,
+            non_keyed_children: nb.non_keyed_children,
+            attributes: nb.attributes,
+            event_listeners: nb.event_listeners,
+        }
     }
 }
 
@@ -132,35 +146,69 @@ pub enum Child {
     Tombstone,
 }
 
-impl From<Str> for Child {
-    fn from(v: Str) -> Child {
-        Child::Text(v)
+impl<W> From<ChildBuilder<W>> for Child
+where
+    W: 'static + Widget,
+{
+    fn from(cb: ChildBuilder<W>) -> Child {
+        match cb {
+            ChildBuilder::Text(string) => Child::Text(string),
+            ChildBuilder::Node(node, _) => Child::Node(node),
+            ChildBuilder::Widget(widget_data, child) => Child::Widget(widget_data, child),
+            ChildBuilder::Tombstone => Child::Tombstone,
+        }
     }
 }
 
-impl From<String> for Child {
-    fn from(v: String) -> Child {
-        Child::Text(v.into())
-    }
+#[derive(Debug)]
+pub enum ChildBuilder<W> {
+    Text(Str),
+    Node(Node, PhantomData<W>),
+    Widget(Box<WidgetDataTrait>, Option<Box<Child>>),
+    Tombstone,
 }
 
-impl From<&'static str> for Child {
-    fn from(v: &'static str) -> Child {
-        Child::Text(v.into())
-    }
-}
-
-impl From<Node> for Child {
-    fn from(v: Node) -> Child {
-        Child::Node(v)
-    }
-}
-
-impl<W> From<WidgetData<W>> for Child
+impl<W> From<Str> for ChildBuilder<W>
 where
     W: Widget + 'static,
 {
-    fn from(v: WidgetData<W>) -> Child {
-        Child::Widget(Box::new(v), None)
+    fn from(v: Str) -> ChildBuilder<W> {
+        ChildBuilder::Text(v)
+    }
+}
+
+impl<W> From<String> for ChildBuilder<W>
+where
+    W: Widget + 'static,
+{
+    fn from(v: String) -> ChildBuilder<W> {
+        ChildBuilder::Text(v.into())
+    }
+}
+
+impl<W> From<&'static str> for ChildBuilder<W>
+where
+    W: Widget + 'static,
+{
+    fn from(v: &'static str) -> ChildBuilder<W> {
+        ChildBuilder::Text(v.into())
+    }
+}
+
+impl<W> From<NodeBuilder<W>> for ChildBuilder<W>
+where
+    W: Widget + 'static,
+{
+    fn from(nb: NodeBuilder<W>) -> ChildBuilder<W> {
+        ChildBuilder::Node(nb.into(), PhantomData)
+    }
+}
+
+impl<W> From<WidgetData<W>> for ChildBuilder<W>
+where
+    W: Widget + 'static,
+{
+    fn from(v: WidgetData<W>) -> ChildBuilder<W> {
+        ChildBuilder::Widget(Box::new(v), None)
     }
 }

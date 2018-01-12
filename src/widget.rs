@@ -1,4 +1,5 @@
 use Child;
+use ChildBuilder;
 use path::Path;
 use diff::Differ;
 
@@ -90,7 +91,7 @@ pub trait Widget: Debug + Eq + Clone {
     ) -> bool {
         last_input != curr_input || last != curr
     }
-    fn render(&self, &Self::Input) -> Child;
+    fn render(&self, &Self::Input) -> ChildBuilder<Self>;
 }
 
 #[derive(Debug)]
@@ -164,7 +165,7 @@ where
     fn render(&mut self) -> Child {
         self.is_dirty = false;
         self.last_widget = Some(self.curr_widget.clone());
-        self.curr_widget.render(&self.curr_input)
+        self.curr_widget.render(&self.curr_input).into()
     }
 
     fn remove(self: Box<Self>) {
