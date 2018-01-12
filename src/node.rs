@@ -1,4 +1,4 @@
-use path::Key;
+use path::{Ident, Key};
 use widget::{Widget, WidgetData, WidgetDataTrait};
 use event::{Listener, ListenerHolder};
 use Str;
@@ -10,8 +10,9 @@ use std::any::TypeId;
 #[derive(Debug)]
 pub struct Node {
     pub ty: Str,
-    pub children: Vec<(Option<Key>, Child)>,
+    pub children: Vec<(Ident, Child)>,
     pub keyed_children: HashMap<Key, usize>,
+    pub non_keyed_children: Vec<usize>,
     pub attributes: HashMap<Str, Str>,
     pub event_listeners: HashMap<TypeId, Option<Box<Listener>>>,
 }
@@ -19,8 +20,9 @@ pub struct Node {
 #[derive(Debug)]
 pub struct NodeBuilder {
     ty: Str,
-    children: Vec<(Option<Key>, Child)>,
+    children: Vec<(Ident, Child)>,
     keyed_children: HashMap<Key, usize>,
+    non_keyed_children: Vec<usize>,
     attributes: HashMap<Str, Str>,
     event_listeners: HashMap<TypeId, Option<Box<Listener>>>,
 }
@@ -34,6 +36,7 @@ impl NodeBuilder {
             ty: ty.into(),
             children: Vec::new(),
             keyed_children: HashMap::new(),
+            non_keyed_children: Vec::new(),
             attributes: HashMap::new(),
             event_listeners: HashMap::new(),
         }
@@ -44,6 +47,7 @@ impl NodeBuilder {
             ty: self.ty,
             children: self.children,
             keyed_children: self.keyed_children,
+            non_keyed_children: self.non_keyed_children,
             attributes: self.attributes,
             event_listeners: self.event_listeners,
         }
@@ -53,7 +57,11 @@ impl NodeBuilder {
     where
         C: Into<Child>,
     {
-        self.children.push((None, child.into()));
+        let child = child.into();
+        let index = self.children.len();
+        let non_keyed_index = self.non_keyed_children.len();
+        self.non_keyed_children.push(index);
+        self.children.push((Ident::Index(non_keyed_index), child));
         self
     }
 
@@ -64,8 +72,9 @@ impl NodeBuilder {
     {
         let key = key.into();
         let child = child.into();
-        self.keyed_children.insert(key.clone(), self.children.len());
-        self.children.push((Some(key), child));
+        let index = self.children.len();
+        self.keyed_children.insert(key.clone(), index);
+        self.children.push((Ident::Key(key), child));
         self
     }
 

@@ -1,5 +1,5 @@
 use {Child, Node};
-use path::{self, Path, PathFrame};
+use path::{Ident, Path, PathFrame};
 use event::ListenerManager;
 use widget::WidgetHolderTrait;
 
@@ -234,77 +234,43 @@ fn diff_nodes(differ: &mut Differ, pf: &PathFrame, last: &mut Node, curr: &mut N
     diff_attributes(differ, pf, last, curr);
     diff_event_listeners(differ, pf, last, curr);
 
-    let mut last_index = 0;
-    let mut non_keyed_index = 0;
-    {
-        let mut curr_it = curr.children.iter_mut().enumerate();
-        loop {
-            let (index, &mut (ref key, ref mut c)) = match curr_it.next() {
-                Some(v) => v,
-                None => break,
-            };
-            match key {
-                &Some(ref key) => {
-                    let pf = pf.add_key(key.clone());
-                    diff(
-                        differ,
-                        &pf,
-                        index,
-                        last.keyed_children
-                            .get(key)
-                            .map(|i| *i)
-                            .and_then(|i| last.children.get_mut(i))
-                            .map(|&mut (_, ref mut l)| l),
-                        Some(c),
-                    );
-                    differ.node_reordered(&pf, index);
-                }
-                &None => {
-                    match last.children.get_mut(last_index) {
-                        Some(&mut (Some(_), ref mut l)) => {
-                            let pf = pf.add_index(non_keyed_index);
-                            diff(differ, &pf, index, Some(l), Some(c));
-                            last_index += 1;
-                            non_keyed_index += 1;
-                        }
-                        Some(&mut (None, _)) => {
-                            last_index += 1;
-                            continue;
-                        }
-                        None => {
-                            for (_, &mut (ref key, ref mut c)) in curr_it {
-                                if key.is_some() {
-                                    continue;
-                                }
-                                let pf = pf.add_index(non_keyed_index);
-                                diff(differ, &pf, 0, None, Some(c));
-                                non_keyed_index += 1;
-                            }
-                            break;
-                        }
-                    }
-                }
+    for (index, &mut (ref ident, ref mut curr_child)) in curr.children.iter_mut().enumerate() {
+        let pf = pf.add_ident(ident.clone());
+        let last_index = match ident {
+            &Ident::Key(ref key) => last.keyed_children.get(key).map(|i| *i),
+            &Ident::Index(non_keyed_index) => {
+                last.non_keyed_children.get(non_keyed_index).map(|i| *i)
+            }
+        };
+        let last_child = last_index
+            .and_then(|i| last.children.get_mut(i))
+            .map(|&mut (_, ref mut child)| child);
+        diff(differ, &pf, index, last_child, Some(curr_child));
+        if let Some(last_index) = last_index {
+            if last_index != index {
+                differ.node_reordered(&pf, index);
             }
         }
     }
 
     // remove non-keyed nodes
-    for &mut (_, ref mut l) in last.children[last_index..]
-        .iter_mut()
-        .filter(|v| v.0.is_none())
+    for (non_keyed_index, index) in last.non_keyed_children
+        .iter()
+        .enumerate()
+        .skip(curr.non_keyed_children.len())
     {
         let pf = pf.add_index(non_keyed_index);
+        let l = &mut last.children.get_mut(*index).unwrap().1;
         diff(differ, &pf, 0, Some(l), None);
-        non_keyed_index += 1;
     }
 
     // remove keyed nodes
-    for (key, l) in last.children
-        .iter_mut()
-        .filter_map(|&mut (ref k, ref mut l)| k.as_ref().map(|k| (k, l)))
-        .filter(|v| !curr.keyed_children.contains_key(&v.0))
+    for (key, index) in last.keyed_children
+        .iter()
+        .filter(|&(ref key, _)| !curr.keyed_children.contains_key(key))
     {
         let pf = pf.add_key(key.clone());
+        let l = &mut last.children.get_mut(*index).unwrap().1;
         diff(differ, &pf, 0, Some(l), None);
     }
 }
@@ -313,19 +279,9 @@ fn visit_children<F>(pf: &PathFrame, node: &mut Node, f: &mut F)
 where
     F: FnMut(&PathFrame, usize, &mut Child),
 {
-    let mut non_keyed_index = 0;
-    for (index, &mut (ref key, ref mut child)) in node.children.iter_mut().enumerate() {
-        match key {
-            &Some(ref key) => {
-                let pf = pf.add_key(key.clone());
-                f(&pf, index, child);
-            }
-            &None => {
-                let pf = pf.add_index(non_keyed_index);
-                non_keyed_index += 1;
-                f(&pf, index, child);
-            }
-        }
+    for (index, &mut (ref ident, ref mut child)) in node.children.iter_mut().enumerate() {
+        let pf = pf.add_ident(ident.clone());
+        f(&pf, index, child);
     }
 }
 
@@ -449,12 +405,12 @@ fn diff(
 fn traverse_path<F, P>(child: &mut Child, path: P, f: F)
 where
     F: FnOnce(usize, &PathFrame, &mut Child),
-    P: AsRef<[path::Ident]>,
+    P: AsRef<[Ident]>,
 {
     traverse_path_(child, 0, &PathFrame::new(), &path.as_ref()[1..], f);
 }
 
-fn traverse_path_<F>(child: &mut Child, index: usize, pf: &PathFrame, path: &[path::Ident], f: F)
+fn traverse_path_<F>(child: &mut Child, index: usize, pf: &PathFrame, path: &[Ident], f: F)
 where
     F: FnOnce(usize, &PathFrame, &mut Child),
 {
@@ -472,30 +428,21 @@ where
         let pf = pf.add_ident(ident.clone());
         match child {
             &mut Child::Node(ref mut node) => {
-                let index_child = match ident {
-                    &path::Ident::Key(ref key) => {
-                        let index = *node.keyed_children.get(key).expect("node key not found");
-                        let child = &mut node.children
-                            .get_mut(index)
-                            .expect("node not found by index")
-                            .1;
-                        (index, child)
+                let index = match ident {
+                    &Ident::Key(ref key) => {
+                        *node.keyed_children.get(key).expect("node key not found")
                     }
-                    &path::Ident::Index(non_keyed_index) => {
-                        node.children
-                            .iter_mut()
-                            .enumerate()
-                            .filter(|&(_, &mut (ref key, _))| key.is_none())
-                            .enumerate()
-                            .find(|&(curr_non_keyed_index, _)| {
-                                curr_non_keyed_index == non_keyed_index
-                            })
-                            .map(|(_, (index, &mut (_, ref mut child)))| (index, child))
-                            .expect("node not found by index")
+                    &Ident::Index(non_keyed_index) => {
+                        *node.non_keyed_children
+                            .get(non_keyed_index)
+                            .expect("node index not found")
                     }
                 };
-
-                traverse_path_(index_child.1, index_child.0, &pf, leftover, f);
+                let child = &mut node.children
+                    .get_mut(index)
+                    .expect("node not found by index")
+                    .1;
+                traverse_path_(child, index, &pf, leftover, f);
             }
             &mut Child::Text(..) | &mut Child::Tombstone | &mut Child::Widget(..) => unreachable!(),
         }
