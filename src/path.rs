@@ -131,14 +131,14 @@ pub enum Ident {
     Key(Key),
 
     /// A *non keyed* (keyed nodes are not counted into it) index.
-    Index(usize),
+    NonKeyedIndex(usize),
 }
 
 impl fmt::Display for Ident {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &Ident::Key(ref key) => write!(f, "{}", key),
-            &Ident::Index(index) => write!(f, "{}", index),
+            &Ident::NonKeyedIndex(non_keyed_index) => write!(f, "{}", non_keyed_index),
         }
     }
 }
@@ -216,8 +216,8 @@ impl<'a> PathFrame<'a> {
         self.add_ident(Ident::Key(key))
     }
 
-    pub fn add_index(&'a self, index: usize) -> PathFrame<'a> {
-        self.add_ident(Ident::Index(index))
+    pub fn add_non_keyed_index(&'a self, non_keyed_index: usize) -> PathFrame<'a> {
+        self.add_ident(Ident::NonKeyedIndex(non_keyed_index))
     }
 
     pub fn parent(&'a self) -> Option<&'a PathFrame<'a>> {

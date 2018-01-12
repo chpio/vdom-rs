@@ -61,7 +61,7 @@ impl NodeBuilder {
         let index = self.children.len();
         let non_keyed_index = self.non_keyed_children.len();
         self.non_keyed_children.push(index);
-        self.children.push((Ident::Index(non_keyed_index), child));
+        self.children.push((Ident::NonKeyedIndex(non_keyed_index), child));
         self
     }
 

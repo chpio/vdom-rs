@@ -238,7 +238,7 @@ fn diff_nodes(differ: &mut Differ, pf: &PathFrame, last: &mut Node, curr: &mut N
         let pf = pf.add_ident(ident.clone());
         let last_index = match ident {
             &Ident::Key(ref key) => last.keyed_children.get(key).map(|i| *i),
-            &Ident::Index(non_keyed_index) => {
+            &Ident::NonKeyedIndex(non_keyed_index) => {
                 last.non_keyed_children.get(non_keyed_index).map(|i| *i)
             }
         };
@@ -259,7 +259,7 @@ fn diff_nodes(differ: &mut Differ, pf: &PathFrame, last: &mut Node, curr: &mut N
         .enumerate()
         .skip(curr.non_keyed_children.len())
     {
-        let pf = pf.add_index(non_keyed_index);
+        let pf = pf.add_non_keyed_index(non_keyed_index);
         let l = &mut last.children.get_mut(*index).unwrap().1;
         diff(differ, &pf, 0, Some(l), None);
     }
@@ -432,7 +432,7 @@ where
                     &Ident::Key(ref key) => {
                         *node.keyed_children.get(key).expect("node key not found")
                     }
-                    &Ident::Index(non_keyed_index) => {
+                    &Ident::NonKeyedIndex(non_keyed_index) => {
                         *node.non_keyed_children
                             .get(non_keyed_index)
                             .expect("node index not found")
