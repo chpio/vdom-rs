@@ -30,35 +30,39 @@ impl Differ {
         F: FnOnce(&mut Differ) + 'static,
     {
         self.schedule_queue.push(Box::new(f));
+        self.schedule_repaint();
+    }
 
-        if self.raf.is_none() {
-            let ctx = self.ctx.as_ref().unwrap().clone();
-            self.raf = Some(window().request_animation_frame(move |_| {
-                let differ = ctx.upgrade().unwrap();
-                let mut differ = differ.borrow_mut();
-                differ.raf = None;
-                let mut queue = mem::replace(&mut differ.schedule_queue, Vec::new());
-                for f in queue.drain(..) {
-                    f.call_box((&mut *differ,));
-                }
-                differ.schedule_queue = queue;
-
-                let mut last_tree = differ.last.take().expect("last was None");
-                while let Some((path, mut rendered)) = differ
-                    .widget_holders
-                    .iter_mut()
-                    .filter(|&(_, ref widget_holder)| widget_holder.should_rerender())
-                    .min_by_key(|&(ref path, _)| path.len())
-                    .map(|(path, widget_holder)| (path.clone(), widget_holder.render()))
-                {
-                    traverse_path(&mut last_tree, path, |index, pf, child| {
-                        diff(&mut *differ, pf, index, Some(child), Some(&mut rendered));
-                        *child = rendered;
-                    });
-                }
-                differ.last = Some(last_tree);
-            }));
+    pub fn schedule_repaint(&mut self) {
+        if self.raf.is_some() {
+            return;
         }
+        let ctx = self.ctx.as_ref().unwrap().clone();
+        self.raf = Some(window().request_animation_frame(move |_| {
+            let differ = ctx.upgrade().unwrap();
+            let mut differ = differ.borrow_mut();
+            differ.raf = None;
+            let mut queue = mem::replace(&mut differ.schedule_queue, Vec::new());
+            for f in queue.drain(..) {
+                f.call_box((&mut *differ,));
+            }
+            differ.schedule_queue = queue;
+
+            let mut last_tree = differ.last.take().expect("last was None");
+            while let Some((path, mut rendered)) = differ
+                .widget_holders
+                .iter_mut()
+                .filter(|&(_, ref widget_holder)| widget_holder.is_dirty())
+                .min_by_key(|&(ref path, _)| path.len())
+                .map(|(path, widget_holder)| (path.clone(), widget_holder.render()))
+            {
+                traverse_path(&mut last_tree, path, |index, pf, child| {
+                    diff(&mut *differ, pf, index, Some(child), Some(&mut rendered));
+                    *child = rendered;
+                });
+            }
+            differ.last = Some(last_tree);
+        }));
     }
 
     fn add_node(&mut self, pf: &PathFrame, index: usize, node: web::Node, node_id: Option<i32>) {
@@ -410,7 +414,13 @@ where
     F: FnOnce(usize, &PathFrame, &mut Child),
     P: AsRef<[Ident]>,
 {
-    traverse_path_(child, 0, &PathFrame::new(), path.as_ref().split_last().unwrap().1, f);
+    traverse_path_(
+        child,
+        0,
+        &PathFrame::new(),
+        path.as_ref().split_last().unwrap().1,
+        f,
+    );
 }
 
 fn traverse_path_<F>(child: &mut Child, index: usize, pf: &PathFrame, path: &[Ident], f: F)

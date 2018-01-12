@@ -107,6 +107,7 @@ where
 }
 
 pub trait WidgetHolderTrait: 'static {
+    fn is_dirty(&self) -> bool;
     fn should_rerender(&self) -> bool;
     fn render(&mut self) -> Child;
     fn remove(self: Box<Self>);
@@ -149,10 +150,11 @@ impl<W> WidgetHolderTrait for WidgetHolder<W>
 where
     W: 'static + Widget,
 {
+    fn is_dirty(&self) -> bool {
+        self.is_dirty
+    }
+
     fn should_rerender(&self) -> bool {
-        if !self.is_dirty {
-            return false;
-        }
         if let (&Some(ref last_widget), &Some(ref last_input)) =
             (&self.last_widget, &self.last_input)
         {

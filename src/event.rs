@@ -69,9 +69,9 @@ where
 {
     fn call(&self, widget_holder: &mut WidgetHolderTrait, event: &Any) {
         let widget_holder = widget_holder.downcast_mut::<W>().unwrap();
-        widget_holder.is_dirty = true;
         let event = event.downcast_ref().unwrap();
         (self.listener)(&mut widget_holder.curr_widget, event);
+        widget_holder.is_dirty = widget_holder.should_rerender();
     }
 
     fn event_type_id(&self) -> TypeId {
@@ -81,23 +81,23 @@ where
     fn register_root(&self, root: &web::Node, ctx: Weak<RefCell<Differ>>) -> EventListenerHandle {
         root.add_event_listener(move |event: E| {
             let ctx = ctx.upgrade().unwrap();
-            ctx.borrow_mut().schedule(move |differ| {
-                let node_id: i32 = js!(
-                    return @{event.as_ref()}.target.__vdomNodeId;
-                ).try_into()
-                    .unwrap();
-                let path = differ.node_id_to_path.get(&node_id).unwrap();
-                let listener_manager = &differ.listener_manager;
-                for len in (0..path.len()).rev() {
-                    let path = path.iter().skip(len).cloned().collect();
-                    if let Some(&(ref widget_path, ref listener)) =
-                        listener_manager.listeners.get(&(path, TypeId::of::<E>()))
-                    {
-                        let widget_holder = differ.widget_holders.get_mut(widget_path).unwrap();
-                        listener.call(&mut **widget_holder, &event);
-                    }
+            let differ = &mut *ctx.borrow_mut();
+            let node_id: i32 = js!(
+                return @{event.as_ref()}.target.__vdomNodeId;
+            ).try_into()
+                .unwrap();
+            let path = differ.node_id_to_path.get(&node_id).unwrap();
+            let listener_manager = &differ.listener_manager;
+            for len in (0..path.len()).rev() {
+                let path = path.iter().skip(len).cloned().collect();
+                if let Some(&(ref widget_path, ref listener)) =
+                    listener_manager.listeners.get(&(path, TypeId::of::<E>()))
+                {
+                    let widget_holder = differ.widget_holders.get_mut(widget_path).unwrap();
+                    listener.call(&mut **widget_holder, &event);
                 }
-            });
+            }
+            differ.schedule_repaint();
         })
     }
 }
