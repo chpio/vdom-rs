@@ -1,7 +1,6 @@
 use path::Path;
 use widget::Widget;
 use diff::Differ;
-// use widget::WidgetHolder;
 use widget::WidgetHolderTrait;
 
 use stdweb::web;
@@ -86,15 +85,17 @@ where
                 return @{event.as_ref()}.target.__vdomNodeId;
             ).try_into()
                 .unwrap();
-            let path = differ.node_id_to_path.get(&node_id).unwrap();
-            let listener_manager = &differ.listener_manager;
-            for len in (0..path.len()).rev() {
-                let path = path.iter().skip(len).cloned().collect();
-                if let Some(&(ref widget_path, ref listener)) =
-                    listener_manager.listeners.get(&(path, TypeId::of::<E>()))
-                {
-                    let widget_holder = differ.widget_holders.get_mut(widget_path).unwrap();
-                    listener.call(&mut **widget_holder, &event);
+            {
+                let path = differ.node_id_to_path.get(&node_id).unwrap();
+                let listener_manager = &differ.listener_manager;
+                for len in (0..path.len()).rev() {
+                    let path = path.iter().skip(len).cloned().collect();
+                    if let Some(&(ref widget_path, ref listener)) =
+                        listener_manager.listeners.get(&(path, TypeId::of::<E>()))
+                    {
+                        let widget_holder = differ.widget_holders.get_mut(widget_path).unwrap();
+                        listener.call(&mut **widget_holder, &event);
+                    }
                 }
             }
             differ.schedule_repaint();

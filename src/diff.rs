@@ -4,13 +4,12 @@ use event::ListenerManager;
 use widget::{Widget, WidgetData, WidgetHolderTrait};
 
 use std::collections::HashMap;
-use std::mem;
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
-use std::boxed::FnBox;
 use stdweb::web::{self, document, window, RequestAnimationFrameHandle};
 
 pub struct Differ {
+    curr: Option<Child>,
     last: Option<Child>,
     raf: Option<RequestAnimationFrameHandle>,
     pub ctx: Option<Weak<RefCell<Differ>>>,
@@ -21,18 +20,9 @@ pub struct Differ {
     pub node_id_to_path: HashMap<i32, Path>,
     next_node_id: i32,
     pub listener_manager: ListenerManager,
-    schedule_queue: Vec<Box<FnBox(&mut Differ)>>,
 }
 
 impl Differ {
-    pub fn schedule<F>(&mut self, f: F)
-    where
-        F: FnOnce(&mut Differ) + 'static,
-    {
-        self.schedule_queue.push(Box::new(f));
-        self.schedule_repaint();
-    }
-
     pub fn schedule_repaint(&mut self) {
         if self.raf.is_some() {
             return;
@@ -42,26 +32,28 @@ impl Differ {
             let differ = ctx.upgrade().unwrap();
             let mut differ = differ.borrow_mut();
             differ.raf = None;
-            let mut queue = mem::replace(&mut differ.schedule_queue, Vec::new());
-            for f in queue.drain(..) {
-                f.call_box((&mut *differ,));
-            }
-            differ.schedule_queue = queue;
 
-            let mut last_tree = differ.last.take().expect("last was None");
-            while let Some((path, mut rendered)) = differ
-                .widget_holders
-                .iter_mut()
-                .filter(|&(_, ref widget_holder)| widget_holder.is_dirty())
-                .min_by_key(|&(ref path, _)| path.len())
-                .map(|(path, widget_holder)| (path.clone(), widget_holder.render()))
-            {
-                traverse_path(&mut last_tree, path, |index, pf, child| {
-                    diff(&mut *differ, pf, index, Some(child), Some(&mut rendered));
-                    *child = rendered;
-                });
+            if let Some(mut curr) = differ.curr.take() {
+                let mut last = differ.last.take();
+                diff(&mut differ, &PathFrame::new(), 0, last.as_mut(), Some(&mut curr));
+                differ.last = Some(curr);
             }
-            differ.last = Some(last_tree);
+
+            if let Some(mut last) = differ.last.take() {
+                while let Some((path, mut rendered)) = differ
+                    .widget_holders
+                    .iter_mut()
+                    .filter(|&(_, ref widget_holder)| widget_holder.is_dirty())
+                    .min_by_key(|&(ref path, _)| path.len())
+                    .map(|(path, widget_holder)| (path.clone(), widget_holder.render()))
+                {
+                    traverse_path(&mut last, path, |index, pf, child| {
+                        diff(&mut *differ, pf, index, Some(child), Some(&mut rendered));
+                        *child = rendered;
+                    });
+                }
+                differ.last = Some(last);
+            }
         }));
     }
 
@@ -170,6 +162,7 @@ impl Context {
     pub fn new(root: web::Node) -> Context {
         let differ = Differ {
             raf: None,
+            curr: None,
             last: None,
             ctx: None,
             root: root,
@@ -179,7 +172,6 @@ impl Context {
             node_id_to_path: HashMap::new(),
             next_node_id: i32::min_value(),
             listener_manager: ListenerManager::new(),
-            schedule_queue: Vec::new(),
         };
 
         let rc = Rc::new(RefCell::new(differ));
@@ -195,13 +187,10 @@ impl Context {
     where
         W: 'static + Widget,
     {
-        self.differ.borrow_mut().schedule(move |differ| {
-            let mut last = differ.last.take();
-            let curr: ChildBuilder<W> = WidgetData::<W>::new(input).into();
-            let mut curr = curr.into();
-            diff(differ, &PathFrame::new(), 0, last.as_mut(), Some(&mut curr));
-            differ.last = Some(curr);
-        });
+        let mut differ = self.differ.borrow_mut();
+        let curr: ChildBuilder<W> = WidgetData::<W>::new(input).into();
+        differ.curr = Some(curr.into());
+        differ.schedule_repaint();
     }
 }
 

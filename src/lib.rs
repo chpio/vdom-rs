@@ -1,6 +1,3 @@
-#![feature(fnbox)]
-#![feature(nll)]
-
 #[macro_use]
 extern crate stdweb;
 
