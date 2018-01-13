@@ -35,7 +35,13 @@ impl Differ {
 
             if let Some(mut curr) = differ.curr.take() {
                 let mut last = differ.last.take();
-                diff(&mut differ, &PathFrame::new(), 0, last.as_mut(), Some(&mut curr));
+                diff(
+                    &mut differ,
+                    &PathFrame::new(),
+                    0,
+                    last.as_mut(),
+                    Some(&mut curr),
+                );
                 differ.last = Some(curr);
             }
 
@@ -322,13 +328,8 @@ fn diff(
     match (last, curr) {
         (Some(last), Some(curr)) => {
             match (last, curr) {
-                (&mut Child::Node(ref mut l), &mut Child::Node(ref mut c)) => {
-                    if l.ty != c.ty {
-                        node_removed(differ, pf, l);
-                        node_added(differ, pf, index, c);
-                    } else {
-                        diff_nodes(differ, pf, l, c);
-                    }
+                (&mut Child::Node(ref mut l), &mut Child::Node(ref mut c)) if l.ty == c.ty => {
+                    diff_nodes(differ, pf, l, c);
                 }
                 (&mut Child::Text(ref l), &mut Child::Text(ref c)) => {
                     if l.as_ref() != c {
@@ -336,10 +337,10 @@ fn diff(
                     }
                 }
                 (
-                    &mut Child::Widget(_, ref mut last_output),
+                    &mut Child::Widget(ref last_input, ref mut last_output),
                     &mut Child::Widget(ref mut curr_input, ref mut curr_output),
-                ) => {
-                    // TODO: check for eq widget type
+                ) if last_input.widget_type_id() == curr_input.widget_type_id() =>
+                {
                     assert!(last_output.is_some());
                     assert!(curr_output.is_none());
                     differ.curr_widget_path = Some(pf.to_path());
@@ -352,6 +353,7 @@ fn diff(
                                 last_output.as_mut().map(|o| &mut **o),
                                 Some(&mut rendered),
                             );
+                            *curr_output = Some(Box::new(rendered));
                         }
                         None => {
                             *curr_output = last_output.take();
