@@ -201,11 +201,12 @@ where
     }
 }
 
-impl<W> From<WidgetData<W>> for ChildBuilder<W>
+impl<W, WI> From<WidgetData<WI>> for ChildBuilder<W>
 where
     W: Widget + 'static,
+    WI: Widget + 'static,
 {
-    fn from(v: WidgetData<W>) -> ChildBuilder<W> {
+    fn from(v: WidgetData<WI>) -> ChildBuilder<W> {
         ChildBuilder::Widget(Box::new(v), None)
     }
 }
