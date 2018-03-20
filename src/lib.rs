@@ -1,6 +1,9 @@
 #[macro_use]
 extern crate stdweb;
 
+mod callback;
+pub use callback::WidgetCallback;
+
 mod diff;
 pub use diff::Context;
 
