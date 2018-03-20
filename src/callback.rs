@@ -30,7 +30,7 @@ where
             .downcast_mut::<W>()
             .unwrap();
         let res = (self.callback)(&mut widget_holder.curr_widget, input);
-        widget_holder.is_dirty = widget_holder.should_rerender();
+        widget_holder.update_is_dirty();
         res
     }
 

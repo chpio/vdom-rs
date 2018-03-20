@@ -70,7 +70,7 @@ where
         let widget_holder = widget_holder.downcast_mut::<W>().unwrap();
         let event = event.downcast_ref().unwrap();
         (self.listener)(&mut widget_holder.curr_widget, event);
-        widget_holder.is_dirty = widget_holder.should_rerender();
+        widget_holder.update_is_dirty();
     }
 
     fn event_type_id(&self) -> TypeId {

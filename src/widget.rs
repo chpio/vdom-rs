@@ -43,7 +43,8 @@ where
                     widget_holder.last_input =
                         Some(mem::replace(&mut widget_holder.curr_input, input));
                 }
-                if widget_holder.should_rerender() {
+                widget_holder.update_is_dirty();
+                if widget_holder.is_dirty() {
                     Some(widget_holder.render())
                 } else {
                     None
@@ -83,14 +84,6 @@ pub trait Widget: Debug + Eq + Clone {
 
     fn new() -> Self;
     fn remove(self) {}
-    fn should_rerender(
-        last: &Self,
-        curr: &Self,
-        last_input: &Self::Input,
-        curr_input: &Self::Input,
-    ) -> bool {
-        last_input != curr_input || last != curr
-    }
     fn render(&self, &Self::Input) -> ChildBuilder<Self>;
 }
 
@@ -108,7 +101,7 @@ where
 
 pub trait WidgetHolderTrait: 'static {
     fn is_dirty(&self) -> bool;
-    fn should_rerender(&self) -> bool;
+    fn update_is_dirty(&mut self);
     fn render(&mut self) -> Child;
     fn remove(self: Box<Self>);
     fn widget_type_id(&self) -> TypeId;
@@ -154,13 +147,11 @@ where
         self.is_dirty
     }
 
-    fn should_rerender(&self) -> bool {
+    fn update_is_dirty(&mut self) {
         if let (&Some(ref last_widget), &Some(ref last_input)) =
             (&self.last_widget, &self.last_input)
         {
-            W::should_rerender(last_widget, &self.curr_widget, last_input, &self.curr_input)
-        } else {
-            true
+            self.is_dirty = last_input != &self.curr_input || last_widget != &self.curr_widget;
         }
     }
 
