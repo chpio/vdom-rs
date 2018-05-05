@@ -1,12 +1,12 @@
+use Str;
+use event::{Listener, ListenerHolder};
 use path::{Ident, Key};
 use widget::{Widget, WidgetData, WidgetDataTrait};
-use event::{Listener, ListenerHolder};
-use Str;
 
-use stdweb::web::event::ConcreteEvent;
-use std::collections::HashMap;
 use std::any::TypeId;
+use std::collections::HashMap;
 use std::marker::PhantomData;
+use stdweb::web::event::ConcreteEvent;
 
 #[derive(Debug)]
 pub struct Node {

@@ -1,25 +1,24 @@
+use diff::Context;
 use path::Path;
 use widget::Widget;
-use diff::Differ;
 use widget::WidgetHolderTrait;
 
-use stdweb::web;
-use stdweb::web::EventListenerHandle;
-use stdweb::web::event::ConcreteEvent;
-use stdweb::web::IEventTarget;
-use stdweb::unstable::TryInto;
-use std::collections::HashMap;
 use std::any::{Any, TypeId};
-use std::ops::Fn;
-use std::marker::PhantomData;
-use std::fmt;
-use std::rc::Weak;
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fmt;
+use std::marker::PhantomData;
+use std::ops::Fn;
+use std::rc::Weak;
+
+pub trait Event {
+    fn event_type(&self) -> &'static str;
+}
 
 pub struct ListenerHolder<W, E, F>
 where
     W: 'static + Widget,
-    E: 'static + ConcreteEvent,
+    E: 'static + Event,
     F: 'static + Fn(&mut W, &E),
 {
     listener: F,
@@ -29,7 +28,7 @@ where
 impl<W, E, F> ListenerHolder<W, E, F>
 where
     W: 'static + Widget,
-    E: 'static + ConcreteEvent,
+    E: 'static + Event,
     F: 'static + Fn(&mut W, &E),
 {
     pub fn new(f: F) -> ListenerHolder<W, E, F> {
@@ -43,7 +42,7 @@ where
 impl<W, E, F> fmt::Debug for ListenerHolder<W, E, F>
 where
     W: 'static + Widget,
-    E: 'static + ConcreteEvent,
+    E: 'static + Event,
     F: 'static + Fn(&mut W, &E),
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -57,13 +56,13 @@ where
 pub trait Listener: fmt::Debug {
     fn call(&self, widget: &mut WidgetHolderTrait, event: &Any);
     fn event_type_id(&self) -> TypeId;
-    fn register_root(&self, root: &web::Node, ctx: Weak<RefCell<Differ>>) -> EventListenerHandle;
+    fn register_root<D: Driver>(&self, ctx_driver: &mut ContextDriver<D>);
 }
 
 impl<W, E, F> Listener for ListenerHolder<W, E, F>
 where
     W: 'static + Widget,
-    E: 'static + ConcreteEvent,
+    E: 'static + Event,
     F: 'static + Fn(&mut W, &E),
 {
     fn call(&self, widget_holder: &mut WidgetHolderTrait, event: &Any) {
@@ -77,35 +76,26 @@ where
         TypeId::of::<E>()
     }
 
-    fn register_root(&self, root: &web::Node, ctx: Weak<RefCell<Differ>>) -> EventListenerHandle {
-        root.add_event_listener(move |event: E| {
-            let ctx = ctx.upgrade().unwrap();
-            let differ = &mut *ctx.borrow_mut();
-            let node_id: i32 = js!(
-                return @{event.as_ref()}.target.__vdomNodeId;
-            ).try_into()
-                .unwrap();
-            {
-                let path = differ.node_id_to_path.get(&node_id).unwrap();
-                let listener_manager = &differ.listener_manager;
-                for len in (0..path.len()).rev() {
-                    let path = path.iter().skip(len).cloned().collect();
-                    if let Some(&(ref widget_path, ref listener)) =
-                        listener_manager.listeners.get(&(path, TypeId::of::<E>()))
-                    {
-                        let widget_holder = differ.widget_holders.get_mut(widget_path).unwrap();
-                        listener.call(&mut **widget_holder, &event);
-                    }
+    fn register_root<D: Driver>(&self, ctx_driver: &mut ContextDriver<D>) {
+        D::register_root_event_listener(ctx_driver, |ctx_driver, path, event: E| {
+            for len in (0..path.len()).rev() {
+                let path = path.iter().skip(len).cloned().collect();
+                if let Some(&(ref widget_path, ref listener)) = ctx_driver
+                    .ctx
+                    .listener_manager
+                    .listeners
+                    .get(&(path, TypeId::of::<E>()))
+                {
+                    let widget_holder = ctx_driver.ctx.widget_holders.get_mut(widget_path).unwrap();
+                    listener.call(&mut **widget_holder, &event);
                 }
             }
-            differ.schedule_repaint();
-        })
+        });
     }
 }
 
 #[derive(Debug)]
 pub struct ListenerManager {
-    root_listeners: HashMap<TypeId, (usize, EventListenerHandle)>,
     listeners: HashMap<(Path, TypeId), (Path, Box<Listener>)>,
 }
 
@@ -118,23 +108,18 @@ impl ListenerManager {
     }
 
     /// Registers a new listener or replaces an old one.
-    pub fn register(differ: &mut Differ, path: Path, widget_path: Path, listener: Box<Listener>) {
+    pub fn register(
+        ctx_driver: &mut ContextDriver<D>,
+        path: Path,
+        widget_path: Path,
+        listener: Box<Listener>,
+    ) {
         use std::collections::hash_map::Entry::{Occupied, Vacant};
-        let listener_manager = &mut differ.listener_manager;
         let type_id = listener.event_type_id();
-        match listener_manager.listeners.entry((path, type_id)) {
+        match ctx_driver.ctx.listener_manager.listeners.entry((path, type_id)) {
             Occupied(mut oe) => *oe.get_mut() = (widget_path, listener),
             Vacant(ve) => {
-                match listener_manager.root_listeners.entry(type_id) {
-                    Occupied(mut oe) => oe.get_mut().0 += 1,
-                    Vacant(ve) => {
-                        ve.insert((
-                            1,
-                            listener
-                                .register_root(&differ.root, differ.ctx.as_ref().unwrap().clone()),
-                        ));
-                    }
-                }
+                listener.register_root(ctx_driver);
                 ve.insert((widget_path, listener));
             }
         }

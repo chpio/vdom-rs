@@ -1,7 +1,7 @@
 use Child;
 use ChildBuilder;
-use path::Path;
 use diff::Differ;
+use path::Path;
 
 use std::any::TypeId;
 use std::fmt::Debug;

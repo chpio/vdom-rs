@@ -1,8 +1,8 @@
+use diff::{Context, Driver};
 use path::Path;
-use widget::{Widget, WidgetHolderTrait};
-use diff::Differ;
 use std::fmt;
 use std::marker::PhantomData;
+use widget::{Widget, WidgetHolderTrait};
 
 // generic W to make rustc happy at `impl InnerTrait for Inner` due to the
 // "unused type parameter" error
@@ -13,7 +13,7 @@ struct Inner<F, W> {
 }
 
 trait InnerTrait<I, O> {
-    fn call(&mut self, input: I, widget_path: &Path, differ: &mut Differ) -> O;
+    fn call(&mut self, ctx: &mut Context, input: I, widget_path: &Path) -> O;
     fn clone_box(&self) -> Box<InnerTrait<I, O>>;
 }
 
@@ -22,9 +22,8 @@ where
     W: 'static + Widget,
     F: 'static + FnMut(&mut W, I) -> O + Clone,
 {
-    fn call(&mut self, input: I, widget_path: &Path, differ: &mut Differ) -> O {
-        let widget_holder = differ
-            .widget_holders
+    fn call(&mut self, ctx: &mut Context, input: I, widget_path: &Path) -> O {
+        let widget_holder = ctx.widget_holders
             .get_mut(widget_path)
             .unwrap()
             .downcast_mut::<W>()
@@ -59,8 +58,8 @@ impl<I, O> WidgetCallback<I, O> {
         }
     }
 
-    pub fn call(&mut self, input: I, differ: &mut Differ) -> O {
-        self.callback.call(input, &self.widget_path, differ)
+    pub fn call(&mut self, ctx: &mut Context, input: I) -> O {
+        self.callback.call(input, ctx, &self.widget_path)
     }
 }
 

@@ -7,6 +7,9 @@ pub use callback::WidgetCallback;
 mod diff;
 pub use diff::Context;
 
+mod dom;
+pub use dom::Dom;
+
 mod event;
 
 mod node;

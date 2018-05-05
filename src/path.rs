@@ -1,8 +1,8 @@
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::iter::{FromIterator, IntoIterator};
 use std::mem;
 use std::rc::Rc;
-use std::hash::{Hash, Hasher};
 use std::slice;
 
 #[derive(Debug, Eq, Clone)]
@@ -57,7 +57,7 @@ impl PartialEq for Key {
 }
 
 macro_rules! impl_from_int_for_key {
-    ($tyu: ty, $tyi: ty) => {
+    ($tyu:ty, $tyi:ty) => {
         impl From<$tyu> for Key {
             fn from(v: $tyu) -> Key {
                 Key::U64(v as u64)
