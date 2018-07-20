@@ -1,7 +1,7 @@
-use Child;
-use ChildBuilder;
 use diff::Differ;
 use path::Path;
+use Child;
+use ChildBuilder;
 
 use std::any::TypeId;
 use std::fmt::Debug;
@@ -36,7 +36,8 @@ where
         use std::collections::hash_map::Entry::{Occupied, Vacant};
         match differ.widget_holders.entry(path.clone()) {
             Occupied(mut oe) => {
-                let widget_holder = oe.get_mut()
+                let widget_holder = oe
+                    .get_mut()
                     .downcast_mut::<W>()
                     .unwrap_or_else(|| panic!("WidgetHolder `{}` has wrong Widget type", path));
                 if let Some(input) = self.input.take() {

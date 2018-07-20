@@ -1,7 +1,7 @@
-use Str;
 use event::{Listener, ListenerHolder};
 use path::{Ident, Key};
 use widget::{Widget, WidgetData, WidgetDataTrait};
+use Str;
 
 use std::any::TypeId;
 use std::collections::HashMap;

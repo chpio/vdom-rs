@@ -7,7 +7,10 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 
-pub trait Driver {
+pub trait Driver
+where
+    Self: Sized,
+{
     fn node_added(ctx_driver: &mut ContextDriver<Self>, pf: &PathFrame, index: usize, ty: &str);
     fn node_removed(ctx_driver: &mut ContextDriver<Self>, pf: &PathFrame);
 
@@ -133,7 +136,8 @@ fn diff_event_listeners<D>(
         );
     }
 
-    for type_id in last.event_listeners
+    for type_id in last
+        .event_listeners
         .keys()
         .filter(|type_id| !curr.event_listeners.contains_key(type_id))
     {
@@ -170,7 +174,8 @@ fn diff_nodes<D>(
     }
 
     // remove non-keyed nodes
-    for (non_keyed_index, index) in last.non_keyed_children
+    for (non_keyed_index, index) in last
+        .non_keyed_children
         .iter()
         .enumerate()
         .skip(curr.non_keyed_children.len())
@@ -181,7 +186,8 @@ fn diff_nodes<D>(
     }
 
     // remove keyed nodes
-    for (key, index) in last.keyed_children
+    for (key, index) in last
+        .keyed_children
         .iter()
         .filter(|&(ref key, _)| !curr.keyed_children.contains_key(key))
     {
@@ -256,7 +262,8 @@ pub fn diff<D>(
                 (
                     &mut Child::Widget(ref last_input, ref mut last_output),
                     &mut Child::Widget(ref mut curr_input, ref mut curr_output),
-                ) if last_input.widget_type_id() == curr_input.widget_type_id() =>
+                )
+                    if last_input.widget_type_id() == curr_input.widget_type_id() =>
                 {
                     assert!(last_output.is_some());
                     assert!(curr_output.is_none());
@@ -354,12 +361,14 @@ where
                         *node.keyed_children.get(key).expect("node key not found")
                     }
                     &Ident::NonKeyedIndex(non_keyed_index) => {
-                        *node.non_keyed_children
+                        *node
+                            .non_keyed_children
                             .get(non_keyed_index)
                             .expect("node index not found")
                     }
                 };
-                let child = &mut node.children
+                let child = &mut node
+                    .children
                     .get_mut(index)
                     .expect("node not found by index")
                     .1;

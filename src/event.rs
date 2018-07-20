@@ -1,4 +1,4 @@
-use diff::Context;
+use diff::{ContextDriver, Driver};
 use path::Path;
 use widget::Widget;
 use widget::WidgetHolderTrait;
@@ -108,7 +108,7 @@ impl ListenerManager {
     }
 
     /// Registers a new listener or replaces an old one.
-    pub fn register(
+    pub fn register<D: Driver>(
         ctx_driver: &mut ContextDriver<D>,
         path: Path,
         widget_path: Path,
@@ -116,7 +116,12 @@ impl ListenerManager {
     ) {
         use std::collections::hash_map::Entry::{Occupied, Vacant};
         let type_id = listener.event_type_id();
-        match ctx_driver.ctx.listener_manager.listeners.entry((path, type_id)) {
+        match ctx_driver
+            .ctx
+            .listener_manager
+            .listeners
+            .entry((path, type_id))
+        {
             Occupied(mut oe) => *oe.get_mut() = (widget_path, listener),
             Vacant(ve) => {
                 listener.register_root(ctx_driver);
@@ -125,9 +130,9 @@ impl ListenerManager {
         }
     }
 
-    pub fn unregister(differ: &mut Differ, path: Path, type_id: TypeId) {
+    pub fn unregister<D: Driver>(ctx_driver: &mut ContextDriver<D>, path: Path, type_id: TypeId) {
         use std::collections::hash_map::Entry::{Occupied, Vacant};
-        let listener_manager = &mut differ.listener_manager;
+        let listener_manager = &mut ctx_driver.ctx.listener_manager;
         if let Some(_) = listener_manager.listeners.remove(&(path, type_id)) {
             match listener_manager.root_listeners.entry(type_id) {
                 Occupied(mut oe) => {

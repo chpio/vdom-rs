@@ -1,5 +1,6 @@
 use diff::diff;
-use diff::{Context, Driver};
+use diff::{Context, ContextDriver, Driver};
+use event::Event;
 use path::Path;
 use path::PathFrame;
 use std::collections::HashMap;

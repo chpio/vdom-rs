@@ -23,7 +23,8 @@ where
     F: 'static + FnMut(&mut W, I) -> O + Clone,
 {
     fn call(&mut self, ctx: &mut Context, input: I, widget_path: &Path) -> O {
-        let widget_holder = ctx.widget_holders
+        let widget_holder = ctx
+            .widget_holders
             .get_mut(widget_path)
             .unwrap()
             .downcast_mut::<W>()
