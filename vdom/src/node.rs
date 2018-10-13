@@ -296,6 +296,7 @@ where
     L1: NodeList,
     L2: NodeList,
 {
+    #[inline]
     fn visit<V>(&self, path: &Path<'_>, index: u64, visitor: &mut V) -> u64
     where
         V: NodeVisitor,
@@ -304,6 +305,7 @@ where
         self.1.visit(path, index, visitor)
     }
 
+    #[inline]
     fn diff<D>(&self, path: &Path<'_>, index: u64, ancestor: &Self, differ: &mut D) -> u64
     where
         D: NodeDiffer,
@@ -319,6 +321,7 @@ impl<N> NodeList for NodeListEntry<N>
 where
     N: Node,
 {
+    #[inline]
     fn visit<V>(&self, path: &Path<'_>, index: u64, visitor: &mut V) -> u64
     where
         V: NodeVisitor,
@@ -328,6 +331,7 @@ where
         index + 1
     }
 
+    #[inline]
     fn diff<D>(&self, path: &Path<'_>, index: u64, ancestor: &Self, differ: &mut D) -> u64
     where
         D: NodeDiffer,

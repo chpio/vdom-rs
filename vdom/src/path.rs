@@ -73,12 +73,14 @@ impl fmt::Display for Key {
 macro_rules! impl_from_int_for_key {
     ($tyu: ty, $tyi: ty) => {
         impl From<$tyu> for Key {
+            #[inline]
             fn from(v: $tyu) -> Key {
                 Key::U64(v as u64)
             }
         }
 
         impl From<$tyi> for Key {
+            #[inline]
             fn from(v: $tyi) -> Key {
                 Key::I64(v as i64)
             }
@@ -93,18 +95,21 @@ impl_from_int_for_key!(u64, i64);
 impl_from_int_for_key!(usize, isize);
 
 impl From<String> for Key {
+    #[inline]
     fn from(v: String) -> Key {
         Key::String(Rc::new(v))
     }
 }
 
 impl From<Rc<String>> for Key {
+    #[inline]
     fn from(v: Rc<String>) -> Key {
         Key::String(v)
     }
 }
 
 impl From<&'static str> for Key {
+    #[inline]
     fn from(v: &'static str) -> Key {
         Key::Str(v)
     }
@@ -129,6 +134,7 @@ pub struct Path<'a> {
 }
 
 impl<'a> Path<'a> {
+    #[inline]
     pub fn new(value: Key) -> Path<'a> {
         Path {
             value,
@@ -136,6 +142,7 @@ impl<'a> Path<'a> {
         }
     }
 
+    #[inline]
     pub fn push<V: Into<Key>>(&'a self, value: V) -> Path<'a> {
         Path {
             value: value.into(),
@@ -150,14 +157,17 @@ impl<'a> Path<'a> {
         }
     }
 
+    #[inline]
     pub fn get(&self) -> &Key {
         &self.value
     }
 
+    #[inline]
     pub fn parent(&'a self) -> Option<&'a Path<'a>> {
         self.parent
     }
 
+    #[inline]
     pub fn iter(&'a self) -> impl Iterator<Item = &'a Key> {
         PathIterator(Some(self))
     }
