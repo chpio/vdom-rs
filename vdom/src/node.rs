@@ -4,31 +4,31 @@ use crate::attr::{AttrDiffer, AttrList, AttrVisitor};
 use crate::path::Path;
 
 pub trait NodeVisitor {
-    fn on_tag<T>(&mut self, tag: &T)
+    fn on_tag<T>(&mut self, path: &Path<'_>, tag: &T)
     where
         T: Tag;
 
-    fn on_text<T>(&mut self, text: &T)
+    fn on_text<T>(&mut self, path: &Path<'_>, text: &T)
     where
         T: Text;
 }
 
 pub trait NodeDiffer {
-    fn on_tag<T>(&mut self, curr: &T, ancestor: &T)
+    fn on_tag<T>(&mut self, path: &Path<'_>, curr: &T, ancestor: &T)
     where
         T: Tag;
 
-    fn on_text<T>(&mut self, curr: &T, ancestor: &T)
+    fn on_text<T>(&mut self, path: &Path<'_>, curr: &T, ancestor: &T)
     where
         T: Text;
 }
 
 pub trait Node {
-    fn visit<V>(&self, visitor: &mut V)
+    fn visit<V>(&self, path: &Path<'_>, visitor: &mut V)
     where
         V: NodeVisitor;
 
-    fn diff<D>(&self, ancestor: &Self, differ: &mut D)
+    fn diff<D>(&self, path: &Path<'_>, ancestor: &Self, differ: &mut D)
     where
         D: NodeDiffer;
 }
@@ -38,11 +38,11 @@ pub trait Tag {
 
     fn tag(&self) -> &str;
 
-    fn visit_children<V>(&self, visitor: &mut V)
+    fn visit_children<V>(&self, path: &Path<'_>, visitor: &mut V)
     where
         V: NodeVisitor;
 
-    fn diff_children<D>(&self, ancestor: &Self, differ: &mut D)
+    fn diff_children<D>(&self, path: &Path<'_>, ancestor: &Self, differ: &mut D)
     where
         D: NodeDiffer;
 
@@ -77,19 +77,19 @@ where
     }
 
     #[inline]
-    fn visit_children<V>(&self, visitor: &mut V)
+    fn visit_children<V>(&self, path: &Path<'_>, visitor: &mut V)
     where
         V: NodeVisitor,
     {
-        self.children.visit(visitor);
+        self.children.visit(path, 0, visitor);
     }
 
     #[inline]
-    fn diff_children<D>(&self, ancestor: &Self, differ: &mut D)
+    fn diff_children<D>(&self, path: &Path<'_>, ancestor: &Self, differ: &mut D)
     where
         D: NodeDiffer,
     {
-        self.children.diff(&ancestor.children, differ);
+        self.children.diff(path, 0, &ancestor.children, differ);
     }
 
     #[inline]
@@ -115,21 +115,21 @@ where
     A: AttrList,
 {
     #[inline]
-    fn visit<V>(&self, visitor: &mut V)
+    fn visit<V>(&self, path: &Path<'_>, visitor: &mut V)
     where
         V: NodeVisitor,
     {
-        visitor.on_tag(self);
+        visitor.on_tag(path, self);
     }
 
     #[inline]
-    fn diff<D>(&self, ancestor: &Self, differ: &mut D)
+    fn diff<D>(&self, path: &Path<'_>, ancestor: &Self, differ: &mut D)
     where
         D: NodeDiffer,
     {
         debug_assert_eq!(self.tag, ancestor.tag);
 
-        differ.on_tag(self, ancestor);
+        differ.on_tag(path, self, ancestor);
     }
 }
 
@@ -155,19 +155,19 @@ where
     }
 
     #[inline]
-    fn visit_children<V>(&self, visitor: &mut V)
+    fn visit_children<V>(&self, path: &Path<'_>, visitor: &mut V)
     where
         V: NodeVisitor,
     {
-        self.children.visit(visitor);
+        self.children.visit(path, 0, visitor);
     }
 
     #[inline]
-    fn diff_children<D>(&self, ancestor: &Self, differ: &mut D)
+    fn diff_children<D>(&self, path: &Path<'_>, ancestor: &Self, differ: &mut D)
     where
         D: NodeDiffer,
     {
-        self.children.diff(&ancestor.children, differ);
+        self.children.diff(path, 0, &ancestor.children, differ);
     }
 
     #[inline]
@@ -193,19 +193,19 @@ where
     A: AttrList,
 {
     #[inline]
-    fn visit<V>(&self, visitor: &mut V)
+    fn visit<V>(&self, path: &Path<'_>, visitor: &mut V)
     where
         V: NodeVisitor,
     {
-        visitor.on_tag(self);
+        visitor.on_tag(path, self);
     }
 
     #[inline]
-    fn diff<D>(&self, ancestor: &Self, differ: &mut D)
+    fn diff<D>(&self, path: &Path<'_>, ancestor: &Self, differ: &mut D)
     where
         D: NodeDiffer,
     {
-        differ.on_tag(self, ancestor);
+        differ.on_tag(path, self, ancestor);
     }
 }
 
@@ -231,21 +231,21 @@ impl Text for TextStatic {
 
 impl Node for TextStatic {
     #[inline]
-    fn visit<V>(&self, visitor: &mut V)
+    fn visit<V>(&self, path: &Path<'_>, visitor: &mut V)
     where
         V: NodeVisitor,
     {
-        visitor.on_text(self);
+        visitor.on_text(path, self);
     }
 
     #[inline]
-    fn diff<D>(&self, ancestor: &Self, differ: &mut D)
+    fn diff<D>(&self, path: &Path<'_>, ancestor: &Self, differ: &mut D)
     where
         D: NodeDiffer,
     {
         debug_assert_eq!(self.0, ancestor.0);
 
-        differ.on_text(self, ancestor);
+        differ.on_text(path, self, ancestor);
     }
 }
 
@@ -265,28 +265,28 @@ impl Text for TextDyn {
 
 impl Node for TextDyn {
     #[inline]
-    fn visit<V>(&self, visitor: &mut V)
+    fn visit<V>(&self, path: &Path<'_>, visitor: &mut V)
     where
         V: NodeVisitor,
     {
-        visitor.on_text(self);
+        visitor.on_text(path, self);
     }
 
     #[inline]
-    fn diff<D>(&self, ancestor: &Self, differ: &mut D)
+    fn diff<D>(&self, path: &Path<'_>, ancestor: &Self, differ: &mut D)
     where
         D: NodeDiffer,
     {
-        differ.on_text(self, ancestor);
+        differ.on_text(path, self, ancestor);
     }
 }
 
 pub trait NodeList {
-    fn visit<V>(&self, visitor: &mut V)
+    fn visit<V>(&self, path: &Path<'_>, index: u64, visitor: &mut V) -> u64
     where
         V: NodeVisitor;
 
-    fn diff<D>(&self, ancestor: &Self, differ: &mut D)
+    fn diff<D>(&self, path: &Path<'_>, index: u64, ancestor: &Self, differ: &mut D) -> u64
     where
         D: NodeDiffer;
 }
@@ -296,20 +296,20 @@ where
     L1: NodeList,
     L2: NodeList,
 {
-    fn visit<V>(&self, visitor: &mut V)
+    fn visit<V>(&self, path: &Path<'_>, index: u64, visitor: &mut V) -> u64
     where
         V: NodeVisitor,
     {
-        self.0.visit(visitor);
-        self.1.visit(visitor);
+        let index = self.0.visit(path, index, visitor);
+        self.1.visit(path, index, visitor)
     }
 
-    fn diff<D>(&self, ancestor: &Self, differ: &mut D)
+    fn diff<D>(&self, path: &Path<'_>, index: u64, ancestor: &Self, differ: &mut D) -> u64
     where
         D: NodeDiffer,
     {
-        self.0.diff(&ancestor.0, differ);
-        self.1.diff(&ancestor.1, differ);
+        let index = self.0.diff(path, index, &ancestor.0, differ);
+        self.1.diff(path, index, &ancestor.1, differ)
     }
 }
 
@@ -319,17 +319,21 @@ impl<N> NodeList for NodeListEntry<N>
 where
     N: Node,
 {
-    fn visit<V>(&self, visitor: &mut V)
+    fn visit<V>(&self, path: &Path<'_>, index: u64, visitor: &mut V) -> u64
     where
         V: NodeVisitor,
     {
-        self.0.visit(visitor);
+        let path = path.push(index);
+        self.0.visit(&path, visitor);
+        index + 1
     }
 
-    fn diff<D>(&self, ancestor: &Self, differ: &mut D)
+    fn diff<D>(&self, path: &Path<'_>, index: u64, ancestor: &Self, differ: &mut D) -> u64
     where
         D: NodeDiffer,
     {
-        self.0.diff(&ancestor.0, differ);
+        let path = path.push(index);
+        self.0.diff(&path, &ancestor.0, differ);
+        index + 1
     }
 }
