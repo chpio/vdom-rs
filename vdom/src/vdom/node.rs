@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
-use crate::attr::{AttrDiffer, AttrList, AttrVisitor};
-use crate::path::Path;
+use super::attr::{AttrDiffer, AttrList, AttrVisitor};
+use super::path::Path;
 
 pub trait NodeVisitor {
     fn on_tag<T>(&mut self, path: &Path<'_>, tag: &T)

@@ -4,6 +4,4 @@
     elided_lifetimes_in_paths
 )]
 
-pub mod attr;
-pub mod node;
-pub mod path;
+pub mod vdom;
