@@ -129,37 +129,74 @@ impl From<Rc<Vec<u8>>> for Key {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Path<'a> {
-    value: Key,
+    index: usize,
+    key: Option<Key>,
     parent: Option<&'a Path<'a>>,
 }
 
 impl<'a> Path<'a> {
     #[inline]
-    pub fn new(value: Key) -> Path<'a> {
+    pub fn new(index: usize) -> Path<'a> {
         Path {
-            value,
+            index,
+            key: None,
             parent: None,
         }
     }
 
     #[inline]
-    pub fn push<V: Into<Key>>(&'a self, value: V) -> Path<'a> {
+    pub fn new_with_key<K: Into<Key>>(index: usize, key: K) -> Path<'a> {
         Path {
-            value: value.into(),
+            index,
+            key: Some(key.into()),
+            parent: None,
+        }
+    }
+
+    #[inline]
+    pub fn push(&'a self, index: usize) -> Path<'a> {
+        Path {
+            index,
+            key: None,
             parent: Some(self),
         }
     }
 
-    pub fn replace<V: Into<Key>>(&'a self, value: V) -> Path<'a> {
+    #[inline]
+    pub fn push_with_key<K: Into<Key>>(&'a self, index: usize, key: K) -> Path<'a> {
         Path {
-            value: value.into(),
+            index,
+            key: Some(key.into()),
+            parent: Some(self),
+        }
+    }
+
+    #[inline]
+    pub fn replace_index(&'a self, index: usize) -> Path<'a> {
+        Path {
+            index,
+            key: self.key.clone(),
             parent: self.parent,
         }
     }
 
     #[inline]
-    pub fn get(&self) -> &Key {
-        &self.value
+    pub fn replace_key<K: Into<Key>>(&'a self, key: K) -> Path<'a> {
+        Path {
+            index: self.index,
+            key: Some(key.into()),
+            parent: self.parent,
+        }
+    }
+
+    #[inline]
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    #[inline]
+    pub fn key(&self) -> Option<&Key> {
+        self.key.as_ref()
     }
 
     #[inline]
@@ -168,7 +205,7 @@ impl<'a> Path<'a> {
     }
 
     #[inline]
-    pub fn iter(&'a self) -> impl Iterator<Item = &'a Key> {
+    pub fn iter(&'a self) -> impl Iterator<Item = &'a Path<'a>> {
         PathIterator(Some(self))
     }
 }
@@ -188,11 +225,11 @@ impl<'a> fmt::Display for Path<'a> {
 struct PathIterator<'a>(Option<&'a Path<'a>>);
 
 impl<'a> Iterator for PathIterator<'a> {
-    type Item = &'a Key;
+    type Item = &'a Path<'a>;
 
     #[inline]
-    fn next(&mut self) -> Option<&'a Key> {
+    fn next(&mut self) -> Option<&'a Path<'a>> {
         let next = self.0.as_ref().and_then(|p| p.parent());
-        mem::replace(&mut self.0, next).map(|p| p.get())
+        mem::replace(&mut self.0, next)
     }
 }

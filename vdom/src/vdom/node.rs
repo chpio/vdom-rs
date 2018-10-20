@@ -363,17 +363,17 @@ pub trait NodeList<D>
 where
     D: Driver,
 {
-    fn visit<NV>(&mut self, path: &Path<'_>, index: u64, visitor: &mut NV) -> u64
+    fn visit<NV>(&mut self, path: &Path<'_>, index: usize, visitor: &mut NV) -> usize
     where
         NV: NodeVisitor<D>;
 
     fn diff<ND>(
         &mut self,
         path: &Path<'_>,
-        index: u64,
+        index: usize,
         ancestor: &mut Self,
         differ: &mut ND,
-    ) -> u64
+    ) -> usize
     where
         ND: NodeDiffer<D>;
 }
@@ -385,7 +385,7 @@ where
     L2: NodeList<D>,
 {
     #[inline]
-    fn visit<NV>(&mut self, path: &Path<'_>, index: u64, visitor: &mut NV) -> u64
+    fn visit<NV>(&mut self, path: &Path<'_>, index: usize, visitor: &mut NV) -> usize
     where
         NV: NodeVisitor<D>,
     {
@@ -394,7 +394,7 @@ where
     }
 
     #[inline]
-    fn diff<ND>(&mut self, path: &Path<'_>, index: u64, ancestor: &mut Self, differ: &mut ND) -> u64
+    fn diff<ND>(&mut self, path: &Path<'_>, index: usize, ancestor: &mut Self, differ: &mut ND) -> usize
     where
         ND: NodeDiffer<D>,
     {
@@ -411,7 +411,7 @@ where
     N: Node<D>,
 {
     #[inline]
-    fn visit<NV>(&mut self, path: &Path<'_>, index: u64, visitor: &mut NV) -> u64
+    fn visit<NV>(&mut self, path: &Path<'_>, index: usize, visitor: &mut NV) -> usize
     where
         NV: NodeVisitor<D>,
     {
@@ -421,7 +421,7 @@ where
     }
 
     #[inline]
-    fn diff<ND>(&mut self, path: &Path<'_>, index: u64, ancestor: &mut Self, differ: &mut ND) -> u64
+    fn diff<ND>(&mut self, path: &Path<'_>, index: usize, ancestor: &mut Self, differ: &mut ND) -> usize
     where
         ND: NodeDiffer<D>,
     {
