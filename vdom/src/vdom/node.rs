@@ -14,13 +14,17 @@ pub trait NodeVisitor {
 }
 
 pub trait NodeDiffer {
-    fn on_tag<T>(&mut self, path: &Path<'_>, curr: &T, ancestor: &T)
+    fn on_node<N>(&mut self, _path: &Path<'_>, _curr: &N, _ancestor: &N)
     where
-        T: Tag;
+        N: Node;
 
-    fn on_text<T>(&mut self, path: &Path<'_>, curr: &T, ancestor: &T)
+    fn on_node_added<N>(&mut self, _path: &Path<'_>, _curr: &N)
     where
-        T: Text;
+        N: Node;
+
+    fn on_node_removed<N>(&mut self, _path: &Path<'_>, _ancestor: &N)
+    where
+        N: Node;
 }
 
 pub trait Node {
@@ -129,7 +133,7 @@ where
     {
         debug_assert_eq!(self.tag, ancestor.tag);
 
-        differ.on_tag(path, self, ancestor);
+        differ.on_node(path, self, ancestor);
     }
 }
 
@@ -205,7 +209,7 @@ where
     where
         D: NodeDiffer,
     {
-        differ.on_tag(path, self, ancestor);
+        differ.on_node(path, self, ancestor);
     }
 }
 
@@ -245,7 +249,7 @@ impl Node for TextStatic {
     {
         debug_assert_eq!(self.0, ancestor.0);
 
-        differ.on_text(path, self, ancestor);
+        differ.on_node(path, self, ancestor);
     }
 }
 
@@ -277,7 +281,7 @@ impl Node for TextDyn {
     where
         D: NodeDiffer,
     {
-        differ.on_text(path, self, ancestor);
+        differ.on_node(path, self, ancestor);
     }
 }
 
