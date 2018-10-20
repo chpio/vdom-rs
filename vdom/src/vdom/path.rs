@@ -172,24 +172,6 @@ impl<'a> Path<'a> {
     }
 
     #[inline]
-    pub fn replace_index(&'a self, index: usize) -> Path<'a> {
-        Path {
-            index,
-            key: self.key.clone(),
-            parent: self.parent,
-        }
-    }
-
-    #[inline]
-    pub fn replace_key<K: Into<Key>>(&'a self, key: K) -> Path<'a> {
-        Path {
-            index: self.index,
-            key: Some(key.into()),
-            parent: self.parent,
-        }
-    }
-
-    #[inline]
     pub fn index(&self) -> usize {
         self.index
     }
