@@ -394,7 +394,13 @@ where
     }
 
     #[inline]
-    fn diff<ND>(&mut self, path: &Path<'_>, index: usize, ancestor: &mut Self, differ: &mut ND) -> usize
+    fn diff<ND>(
+        &mut self,
+        path: &Path<'_>,
+        index: usize,
+        ancestor: &mut Self,
+        differ: &mut ND,
+    ) -> usize
     where
         ND: NodeDiffer<D>,
     {
@@ -421,7 +427,13 @@ where
     }
 
     #[inline]
-    fn diff<ND>(&mut self, path: &Path<'_>, index: usize, ancestor: &mut Self, differ: &mut ND) -> usize
+    fn diff<ND>(
+        &mut self,
+        path: &Path<'_>,
+        index: usize,
+        ancestor: &mut Self,
+        differ: &mut ND,
+    ) -> usize
     where
         ND: NodeDiffer<D>,
     {
