@@ -1,3 +1,5 @@
+use crate::driver::Driver;
+
 #[derive(Clone, Eq, PartialEq)]
 pub enum AttrValue {
     True,
@@ -72,23 +74,40 @@ impl<'a> From<&'a AttrValue> for AttrRefValue<'a> {
     }
 }
 
-pub trait Attr {
+pub trait Attr<D>
+where
+    D: Driver,
+{
     fn is_value_static(&self) -> bool;
     fn name(&self) -> &str;
     fn value(&self) -> AttrRefValue<'_>;
+    fn driver_store(&mut self) -> &mut D::AttrStore;
 }
 
-pub struct AttrTrue {
+pub struct AttrTrue<D>
+where
+    D: Driver,
+{
     key: &'static str,
+    driver_store: D::AttrStore,
 }
 
-impl AttrTrue {
-    pub fn new(key: &'static str) -> AttrTrue {
-        AttrTrue { key }
+impl<D> AttrTrue<D>
+where
+    D: Driver,
+{
+    pub fn new(key: &'static str) -> AttrTrue<D> {
+        AttrTrue {
+            key,
+            driver_store: D::new_attr_store(),
+        }
     }
 }
 
-impl Attr for AttrTrue {
+impl<D> Attr<D> for AttrTrue<D>
+where
+    D: Driver,
+{
     #[inline]
     fn is_value_static(&self) -> bool {
         true
@@ -103,20 +122,39 @@ impl Attr for AttrTrue {
     fn value(&self) -> AttrRefValue<'_> {
         AttrRefValue::True
     }
-}
 
-pub struct AttrStr {
-    key: &'static str,
-    value: &'static str,
-}
-
-impl AttrStr {
-    pub fn new(key: &'static str, value: &'static str) -> AttrStr {
-        AttrStr { key, value }
+    #[inline]
+    fn driver_store(&mut self) -> &mut D::AttrStore {
+        &mut self.driver_store
     }
 }
 
-impl Attr for AttrStr {
+pub struct AttrStr<D>
+where
+    D: Driver,
+{
+    key: &'static str,
+    value: &'static str,
+    driver_store: D::AttrStore,
+}
+
+impl<D> AttrStr<D>
+where
+    D: Driver,
+{
+    pub fn new(key: &'static str, value: &'static str) -> AttrStr<D> {
+        AttrStr {
+            key,
+            value,
+            driver_store: D::new_attr_store(),
+        }
+    }
+}
+
+impl<D> Attr<D> for AttrStr<D>
+where
+    D: Driver,
+{
     #[inline]
     fn is_value_static(&self) -> bool {
         true
@@ -131,26 +169,42 @@ impl Attr for AttrStr {
     fn value(&self) -> AttrRefValue<'_> {
         AttrRefValue::Str(self.value)
     }
+
+    #[inline]
+    fn driver_store(&mut self) -> &mut D::AttrStore {
+        &mut self.driver_store
+    }
 }
 
-pub struct AttrDyn {
+pub struct AttrDyn<D>
+where
+    D: Driver,
+{
     key: &'static str,
     value: AttrValue,
+    driver_store: D::AttrStore,
 }
 
-impl AttrDyn {
-    pub fn new<V>(key: &'static str, value: V) -> AttrDyn
+impl<D> AttrDyn<D>
+where
+    D: Driver,
+{
+    pub fn new<V>(key: &'static str, value: V) -> AttrDyn<D>
     where
         V: Into<AttrValue>,
     {
         AttrDyn {
             key,
             value: value.into(),
+            driver_store: D::new_attr_store(),
         }
     }
 }
 
-impl Attr for AttrDyn {
+impl<D> Attr<D> for AttrDyn<D>
+where
+    D: Driver,
+{
     #[inline]
     fn is_value_static(&self) -> bool {
         false
@@ -165,68 +219,84 @@ impl Attr for AttrDyn {
     fn value(&self) -> AttrRefValue<'_> {
         (&self.value).into()
     }
+
+    #[inline]
+    fn driver_store(&mut self) -> &mut D::AttrStore {
+        &mut self.driver_store
+    }
 }
 
-pub trait AttrVisitor {
-    fn on_attr<A>(&mut self, attr: &A)
-    where
-        A: Attr;
-}
-
-pub trait AttrDiffer {
-    fn on_diff<A>(&mut self, curr: &A, ancestor: &A)
-    where
-        A: Attr;
-}
-
-pub trait AttrList {
-    fn visit<V>(&self, visitor: &mut V)
-    where
-        V: AttrVisitor;
-
-    fn diff<D>(&self, ancestor: &Self, differ: &mut D)
-    where
-        D: AttrDiffer;
-}
-
-impl<L1, L2> AttrList for (L1, L2)
+pub trait AttrVisitor<D>
 where
-    L1: AttrList,
-    L2: AttrList,
+    D: Driver,
 {
-    fn visit<V>(&self, visitor: &mut V)
+    fn on_attr<A>(&mut self, attr: &mut A)
     where
-        V: AttrVisitor,
+        A: Attr<D>;
+}
+
+pub trait AttrDiffer<D>
+where
+    D: Driver,
+{
+    fn on_diff<A>(&mut self, curr: &mut A, ancestor: &mut A)
+    where
+        A: Attr<D>;
+}
+
+pub trait AttrList<D>
+where
+    D: Driver,
+{
+    fn visit<AV>(&mut self, visitor: &mut AV)
+    where
+        AV: AttrVisitor<D>;
+
+    fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD)
+    where
+        AD: AttrDiffer<D>;
+}
+
+impl<D, L1, L2> AttrList<D> for (L1, L2)
+where
+    D: Driver,
+    L1: AttrList<D>,
+    L2: AttrList<D>,
+{
+    fn visit<AV>(&mut self, visitor: &mut AV)
+    where
+        AV: AttrVisitor<D>,
     {
         self.0.visit(visitor);
         self.1.visit(visitor);
     }
 
-    fn diff<D>(&self, ancestor: &Self, differ: &mut D)
+    fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD)
     where
-        D: AttrDiffer,
+        AD: AttrDiffer<D>,
     {
-        self.0.diff(&ancestor.0, differ);
-        self.1.diff(&ancestor.1, differ);
+        self.0.diff(&mut ancestor.0, differ);
+        self.1.diff(&mut ancestor.1, differ);
     }
 }
 
 pub struct AttrListEntry<A>(A);
 
-impl<A> AttrList for AttrListEntry<A>
+impl<A, D> AttrList<D> for AttrListEntry<A>
 where
-    A: Attr,
+    A: Attr<D>,
+    D: Driver,
 {
-    fn visit<V>(&self, visitor: &mut V)
+    fn visit<AV>(&mut self, visitor: &mut AV)
     where
-        V: AttrVisitor,
+        AV: AttrVisitor<D>,
     {
-        visitor.on_attr(&self.0);
+        visitor.on_attr(&mut self.0);
     }
 
-    fn diff<D>(&self, ancestor: &Self, differ: &mut D)
+    fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD)
     where
-        D: AttrDiffer,
+        AD: AttrDiffer<D>,
     {
         debug_assert_eq!(self.0.name(), ancestor.0.name());
 
@@ -238,6 +308,6 @@ where
             }
         };
 
-        differ.on_diff(&self.0, &ancestor.0);
+        differ.on_diff(&mut self.0, &mut ancestor.0);
     }
 }
