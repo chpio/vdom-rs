@@ -1,4 +1,5 @@
 [workspace]
 members = [
-    "vdom"
+    "vdom",
+    "vdom_web",
 ]
