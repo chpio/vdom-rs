@@ -84,6 +84,22 @@ where
     driver_store: D::TagStore,
 }
 
+impl<D, C, A> TagStatic<D, C, A>
+where
+    D: Driver,
+    C: NodeList<D>,
+    A: AttrList<D>,
+{
+    pub fn new(tag: &'static str, attrs: A, children: C) -> TagStatic<D, C, A> {
+        TagStatic {
+            tag,
+            children,
+            attrs,
+            driver_store: D::new_tag_store(),
+        }
+    }
+}
+
 impl<D, C, A> Tag<D> for TagStatic<D, C, A>
 where
     D: Driver,
@@ -171,6 +187,25 @@ where
     children: C,
     attrs: A,
     driver_store: D::TagStore,
+}
+
+impl<D, C, A> TagDyn<D, C, A>
+where
+    D: Driver,
+    C: NodeList<D>,
+    A: AttrList<D>,
+{
+    pub fn new<T>(tag: T, attrs: A, children: C) -> TagDyn<D, C, A>
+    where
+        T: Into<Cow<'static, str>>,
+    {
+        TagDyn {
+            tag: tag.into(),
+            children,
+            attrs,
+            driver_store: D::new_tag_store(),
+        }
+    }
 }
 
 impl<D, C, A> Tag<D> for TagDyn<D, C, A>
@@ -267,6 +302,18 @@ where
     driver_store: D::TextStore,
 }
 
+impl<D> TextStatic<D>
+where
+    D: Driver,
+{
+    pub fn new(text: &'static str) -> TextStatic<D> {
+        TextStatic {
+            text,
+            driver_store: D::new_text_store(),
+        }
+    }
+}
+
 impl<D> Text<D> for TextStatic<D>
 where
     D: Driver,
@@ -318,6 +365,21 @@ where
     driver_store: D::TextStore,
 }
 
+impl<D> TextDyn<D>
+where
+    D: Driver,
+{
+    pub fn new<T>(text: T) -> TextDyn<D>
+    where
+        T: Into<Cow<'static, str>>,
+    {
+        TextDyn {
+            text: text.into(),
+            driver_store: D::new_text_store(),
+        }
+    }
+}
+
 impl<D> Text<D> for TextDyn<D>
 where
     D: Driver,
@@ -361,6 +423,7 @@ where
 
 pub trait NodeList<D>
 where
+    Self: Sized,
     D: Driver,
 {
     fn visit<NV>(&mut self, path: &Path<'_>, index: usize, visitor: &mut NV) -> usize
@@ -376,6 +439,13 @@ where
     ) -> usize
     where
         ND: NodeDiffer<D>;
+
+    fn push<N>(self, node: N) -> (Self, NodeListEntry<N>)
+    where
+        N: Node<D>,
+    {
+        (self, NodeListEntry(node))
+    }
 }
 
 impl<D, L1, L2> NodeList<D> for (L1, L2)
@@ -410,6 +480,12 @@ where
 }
 
 pub struct NodeListEntry<N>(N);
+
+impl<A> NodeListEntry<A> {
+    pub fn new(node: A) -> NodeListEntry<A> {
+        NodeListEntry(node)
+    }
+}
 
 impl<D, N> NodeList<D> for NodeListEntry<N>
 where

@@ -246,6 +246,7 @@ where
 
 pub trait AttrList<D>
 where
+    Self: Sized,
     D: Driver,
 {
     fn visit<AV>(&mut self, visitor: &mut AV)
@@ -255,6 +256,13 @@ where
     fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD)
     where
         AD: AttrDiffer<D>;
+
+    fn push<A>(self, attr: A) -> (Self, AttrListEntry<A>)
+    where
+        A: Attr<D>,
+    {
+        (self, AttrListEntry(attr))
+    }
 }
 
 impl<D, L1, L2> AttrList<D> for (L1, L2)
@@ -281,6 +289,12 @@ where
 }
 
 pub struct AttrListEntry<A>(A);
+
+impl<A> AttrListEntry<A> {
+    pub fn new(attr: A) -> AttrListEntry<A> {
+        AttrListEntry(attr)
+    }
+}
 
 impl<A, D> AttrList<D> for AttrListEntry<A>
 where
