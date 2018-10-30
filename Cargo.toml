@@ -1,5 +1,6 @@
 [workspace]
 members = [
     "vdom",
+    "vdom_macro",
     "vdom_web",
 ]
