@@ -24,9 +24,9 @@ impl Parse for Node {
 
 #[derive(Debug)]
 pub struct Tag {
-    tag: Ident,
-    attrs: Vec<Attr>,
-    children: Vec<Node>,
+    pub tag: Ident,
+    pub attrs: Vec<Attr>,
+    pub children: Vec<Node>,
 }
 
 impl Parse for Tag {
@@ -61,9 +61,9 @@ impl Parse for Tag {
 
 #[derive(Debug)]
 pub struct Attr {
-    name: Ident,
-    value: AttrValue,
-    condition: Option<Expr>,
+    pub name: Ident,
+    pub value: AttrValue,
+    pub condition: Option<Expr>,
 }
 
 impl Parse for Attr {
