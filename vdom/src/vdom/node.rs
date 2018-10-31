@@ -480,10 +480,30 @@ where
 }
 
 pub struct NodeListEntry<N>(N);
+impl<D> NodeList<D> for ()
+where
+    D: Driver,
+{
+    #[inline]
+    fn visit<NV>(&mut self, path: &Path<'_>, index: usize, visitor: &mut NV) -> usize
+    where
+        NV: NodeVisitor<D>,
+    {
+        index
+    }
 
-impl<A> NodeListEntry<A> {
-    pub fn new(node: A) -> NodeListEntry<A> {
-        NodeListEntry(node)
+    #[inline]
+    fn diff<ND>(
+        &mut self,
+        path: &Path<'_>,
+        index: usize,
+        ancestor: &mut Self,
+        differ: &mut ND,
+    ) -> usize
+    where
+        ND: NodeDiffer<D>,
+    {
+        index
     }
 }
 

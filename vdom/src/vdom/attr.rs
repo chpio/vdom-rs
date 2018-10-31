@@ -289,10 +289,20 @@ where
 }
 
 pub struct AttrListEntry<A>(A);
+impl<D> AttrList<D> for ()
+where
+    D: Driver,
+{
+    fn visit<AV>(&mut self, visitor: &mut AV)
+    where
+        AV: AttrVisitor<D>,
+    {
+    }
 
-impl<A> AttrListEntry<A> {
-    pub fn new(attr: A) -> AttrListEntry<A> {
-        AttrListEntry(attr)
+    fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD)
+    where
+        AD: AttrDiffer<D>,
+    {
     }
 }
 
