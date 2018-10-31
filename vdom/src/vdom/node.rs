@@ -479,7 +479,6 @@ where
     }
 }
 
-pub struct NodeListEntry<N>(N);
 impl<D> NodeList<D> for ()
 where
     D: Driver,
@@ -506,6 +505,8 @@ where
         index
     }
 }
+
+pub struct NodeListEntry<N>(pub N);
 
 impl<D, N> NodeList<D> for NodeListEntry<N>
 where

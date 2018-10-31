@@ -288,7 +288,6 @@ where
     }
 }
 
-pub struct AttrListEntry<A>(A);
 impl<D> AttrList<D> for ()
 where
     D: Driver,
@@ -305,6 +304,8 @@ where
     {
     }
 }
+
+pub struct AttrListEntry<A>(pub A);
 
 impl<A, D> AttrList<D> for AttrListEntry<A>
 where
