@@ -1,8 +1,8 @@
 use syn::{
     braced, bracketed,
     ext::IdentExt,
-    parse::{Parse, ParseBuffer, ParseStream, Result},
-    punctuated::Punctuated,
+    parenthesized,
+    parse::{Parse, ParseStream, Result},
     token, Expr, Ident, LitStr, Token,
 };
 
@@ -73,7 +73,13 @@ impl Parse for Attr {
 
         let value = if input.peek(Token![=]) {
             input.parse::<Token![=]>()?;
-            AttrValue::Str(input.parse()?)
+            if input.peek(token::Paren) {
+                let expr;
+                parenthesized!(expr in input);
+                AttrValue::Expr(expr.parse()?)
+            } else {
+                AttrValue::Str(input.parse()?)
+            }
         } else if input.peek(Token![?]) {
             input.parse::<Token![?]>()?;
             AttrValue::True
@@ -100,16 +106,24 @@ impl Parse for Attr {
 #[derive(Debug)]
 pub enum AttrValue {
     Str(LitStr),
+    Expr(Expr),
     True,
 }
 
 #[derive(Debug)]
 pub enum Text {
     Str(LitStr),
+    Expr(Expr),
 }
 
 impl Parse for Text {
     fn parse(input: ParseStream) -> Result<Self> {
-        Ok(Text::Str(input.parse()?))
+        if input.peek(token::Paren) {
+            let expr;
+            parenthesized!(expr in input);
+            Ok(Text::Expr(expr.parse()?))
+        } else {
+            Ok(Text::Str(input.parse()?))
+        }
     }
 }

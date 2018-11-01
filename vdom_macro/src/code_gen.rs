@@ -16,6 +16,11 @@ fn gen_text(text: Text) -> TokenStream {
                 vdom::vdom::node::TextStatic::new(#lit_str)
             }
         }
+        Text::Expr(expr) => {
+            quote!{
+                vdom::vdom::node::TextDyn::new(#expr)
+            }
+        }
     }
 }
 
@@ -66,6 +71,11 @@ fn gen_attr(attr: Attr) -> TokenStream {
                     #name,
                     #lit_str
                 )
+            }
+        }
+        AttrValue::Expr(expr) => {
+            quote!{
+                vdom::vdom::attr::AttrDyn::new(#name, #expr)
             }
         }
         AttrValue::True => {
