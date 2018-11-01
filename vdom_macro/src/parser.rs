@@ -1,5 +1,6 @@
 use syn::{
     braced, bracketed,
+    ext::IdentExt,
     parse::{Parse, ParseBuffer, ParseStream, Result},
     punctuated::Punctuated,
     token, Expr, Ident, LitStr, Token,
@@ -31,7 +32,7 @@ pub struct Tag {
 
 impl Parse for Tag {
     fn parse(input: ParseStream) -> Result<Self> {
-        let tag = input.parse()?;
+        let tag = Ident::parse_any(input)?;
 
         let mut attrs = Vec::new();
         while input.fork().parse::<Attr>().is_ok() {
@@ -68,7 +69,7 @@ pub struct Attr {
 
 impl Parse for Attr {
     fn parse(input: ParseStream) -> Result<Self> {
-        let name = input.parse()?;
+        let name = Ident::parse_any(input)?;
 
         let value = if input.peek(Token![=]) {
             input.parse::<Token![=]>()?;
