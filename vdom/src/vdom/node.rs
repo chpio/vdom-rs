@@ -21,10 +21,6 @@ pub trait NodeDiffer<D>
 where
     D: Driver,
 {
-    fn on_node<N>(&mut self, path: &Path<'_>, curr: &mut N, ancestor: &mut N)
-    where
-        N: Node<D>;
-
     fn on_node_added<N>(&mut self, path: &Path<'_>, curr: &mut N)
     where
         N: Node<D>;
@@ -32,6 +28,14 @@ where
     fn on_node_removed<N>(&mut self, path: &Path<'_>, ancestor: &mut N)
     where
         N: Node<D>;
+
+    fn on_tag<T>(&mut self, path: &Path<'_>, curr: &mut T, ancestor: &mut T)
+    where
+        T: Tag<D>;
+
+    fn on_text_changed<T>(&mut self, path: &Path<'_>, curr: &mut T, ancestor: &mut T)
+    where
+        T: Text<D>;
 }
 
 pub trait Node<D>
@@ -175,7 +179,7 @@ where
     {
         debug_assert_eq!(self.tag, ancestor.tag);
 
-        differ.on_node(path, self, ancestor);
+        differ.on_tag(path, self, ancestor);
     }
 }
 
@@ -281,7 +285,7 @@ where
     where
         ND: NodeDiffer<D>,
     {
-        differ.on_node(path, self, ancestor);
+        differ.on_tag(path, self, ancestor);
     }
 }
 
@@ -352,8 +356,6 @@ where
         ND: NodeDiffer<D>,
     {
         debug_assert_eq!(self.text, ancestor.text);
-
-        differ.on_node(path, self, ancestor);
     }
 }
 
@@ -417,7 +419,9 @@ where
     where
         ND: NodeDiffer<D>,
     {
-        differ.on_node(path, self, ancestor);
+        if self.text.as_ref() != ancestor.text.as_ref() {
+            differ.on_text_changed(path, self, ancestor);
+        }
     }
 }
 
