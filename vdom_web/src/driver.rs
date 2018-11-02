@@ -15,10 +15,14 @@ pub struct WebDriver;
 pub struct AttrStore;
 
 #[derive(Default)]
-pub struct TagStore;
+pub struct TagStore {
+    element: Option<web::Element>,
+}
 
 #[derive(Default)]
-pub struct TextStore;
+pub struct TextStore {
+    text: Option<web::Text>,
+}
 
 impl Driver for WebDriver {
     type AttrStore = AttrStore;
@@ -94,6 +98,7 @@ impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
             },
         );
         self.parent_web_node.append_child(elem.as_ref()).unwrap();
+        tag.driver_store().element = Some(elem);
     }
 
     fn on_text<T>(&mut self, path: &Path<'_>, text: &mut T)
@@ -108,6 +113,7 @@ impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
         self.parent_web_node
             .append_child(text_node.as_ref())
             .unwrap();
+        text.driver_store().text = Some(text_node);
     }
 }
 
