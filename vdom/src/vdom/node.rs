@@ -33,7 +33,7 @@ where
     where
         T: Tag<D>;
 
-    fn on_text_changed<T>(&mut self, path: &Path<'_>, curr: &mut T, ancestor: &mut T)
+    fn on_text<T>(&mut self, path: &Path<'_>, curr: &mut T, ancestor: &mut T)
     where
         T: Text<D>;
 }
@@ -356,6 +356,7 @@ where
         ND: NodeDiffer<D>,
     {
         debug_assert_eq!(self.text, ancestor.text);
+        differ.on_text(path, self, ancestor);
     }
 }
 
@@ -419,9 +420,7 @@ where
     where
         ND: NodeDiffer<D>,
     {
-        if self.text.as_ref() != ancestor.text.as_ref() {
-            differ.on_text_changed(path, self, ancestor);
-        }
+        differ.on_text(path, self, ancestor);
     }
 }
 
