@@ -569,3 +569,45 @@ where
         }
     }
 }
+
+pub trait IntoNode<D>
+where
+    D: Driver,
+{
+    type Node: Node<D>;
+
+    fn into_node(self) -> Self::Node;
+}
+
+impl<D> IntoNode<D> for &'static str
+where
+    D: Driver,
+{
+    type Node = TextStatic<D>;
+
+    fn into_node(self) -> Self::Node {
+        TextStatic::new(self)
+    }
+}
+
+impl<D> IntoNode<D> for Cow<'static, str>
+where
+    D: Driver,
+{
+    type Node = TextDyn<D>;
+
+    fn into_node(self) -> Self::Node {
+        TextDyn::new(self)
+    }
+}
+
+impl<D> IntoNode<D> for String
+where
+    D: Driver,
+{
+    type Node = TextDyn<D>;
+
+    fn into_node(self) -> Self::Node {
+        TextDyn::new(self)
+    }
+}
