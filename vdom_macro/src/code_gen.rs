@@ -43,7 +43,7 @@ fn gen_tag(tag: Tag) -> TokenStream {
         .children
         .into_iter()
         .map(gen_node)
-        .map(|attr| quote!{vdom::vdom::node::NodeListEntry(#attr)})
+        .map(|node| quote!{vdom::vdom::node::NodeListEntry(#node)})
         .fold(None, |prev_nodes, node| {
             match prev_nodes {
                 Some(prev_nodes) => Some(quote!{(#prev_nodes, #node)}),
