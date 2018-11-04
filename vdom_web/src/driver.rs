@@ -132,6 +132,33 @@ impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
     }
 }
 
+struct NodeRemoveVisitor;
+
+impl NodeVisitor<WebDriver> for NodeRemoveVisitor {
+    fn on_tag<T>(&mut self, path: &Path<'_>, tag: &mut T)
+    where
+        T: Tag<WebDriver>,
+    {
+        let elem = tag
+            .driver_store()
+            .element
+            .as_ref()
+            .expect("element is None");
+        elem.remove();
+    }
+
+    fn on_text<T>(&mut self, path: &Path<'_>, text: &mut T)
+    where
+        T: Text<WebDriver>,
+    {
+        let text_node = text.driver_store().text.as_ref().expect("text is None");
+        let node = AsRef::<web::Node>::as_ref(text_node);
+        node.parent_node()
+            .expect("parent is None")
+            .remove_child(node);
+    }
+}
+
 struct AttrAddVisitor<'a> {
     parent_element: &'a web::Element,
 }
