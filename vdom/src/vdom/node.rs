@@ -583,10 +583,10 @@ impl<D> IntoNode<D> for &'static str
 where
     D: Driver,
 {
-    type Node = TextStatic<D>;
+    type Node = TextDyn<D>;
 
     fn into_node(self) -> Self::Node {
-        TextStatic::new(self)
+        TextDyn::new(self)
     }
 }
 
