@@ -46,7 +46,7 @@ pub struct App<C>
 where
     C: Comp<WebDriver>,
 {
-    web_node: web::Node,
+    root_element: web::Element,
     comp: C,
     comp_input: C::Input,
     last_rendered: C::Rendered,
@@ -56,25 +56,38 @@ impl<C> App<C>
 where
     C: Comp<WebDriver>,
 {
-    pub fn new(comp: C, comp_input: C::Input, web_node: web::Node) -> App<C> {
+    pub fn new(comp: C, comp_input: C::Input, root_element: web::Element) -> App<C> {
         let mut last_rendered = comp.render(&comp_input);
         last_rendered.visit(
             &Path::new(0),
             &mut NodeAddVisitor {
-                parent_web_node: &web_node,
+                parent_element: &root_element,
             },
         );
         App {
-            web_node,
+            root_element,
             comp,
             last_rendered,
             comp_input,
         }
     }
+
+    pub fn set_input(&mut self, comp_input: C::Input) {
+        self.comp_input = comp_input;
+        let mut curr_rendered = self.comp.render(&self.comp_input);
+        curr_rendered.diff(
+            &Path::new(0),
+            &mut self.last_rendered,
+            &mut NodeStdDiffer {
+                parent_element: &self.root_element,
+            },
+        );
+        self.last_rendered = curr_rendered;
+    }
 }
 
 struct NodeAddVisitor<'a> {
-    parent_web_node: &'a web::Node,
+    parent_element: &'a web::Element,
 }
 
 impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
@@ -89,15 +102,17 @@ impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
             .create_element(tag.tag())
             .unwrap();
         tag.visit_attr(&mut AttrAddVisitor {
-            parent_web_elem: &elem,
+            parent_element: &elem,
         });
         tag.visit_children(
             path,
             &mut NodeAddVisitor {
-                parent_web_node: elem.as_ref(),
+                parent_element: &elem,
             },
         );
-        self.parent_web_node.append_child(elem.as_ref()).unwrap();
+        AsRef::<web::Node>::as_ref(&self.parent_element)
+            .append_child(elem.as_ref())
+            .unwrap();
         tag.driver_store().element = Some(elem);
     }
 
@@ -110,7 +125,7 @@ impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
             .document()
             .unwrap()
             .create_text_node(text.get());
-        self.parent_web_node
+        AsRef::<web::Node>::as_ref(&self.parent_element)
             .append_child(text_node.as_ref())
             .unwrap();
         text.driver_store().text = Some(text_node);
@@ -118,7 +133,7 @@ impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
 }
 
 struct AttrAddVisitor<'a> {
-    parent_web_elem: &'a web::Element,
+    parent_element: &'a web::Element,
 }
 
 impl<'a> AttrVisitor<WebDriver> for AttrAddVisitor<'a> {
@@ -133,7 +148,7 @@ impl<'a> AttrVisitor<WebDriver> for AttrAddVisitor<'a> {
         };
 
         if let Some(value) = value {
-            self.parent_web_elem
+            self.parent_element
                 .set_attribute(attr.name(), value)
                 .unwrap();
         }
