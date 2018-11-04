@@ -9,12 +9,17 @@ use syn::{
 #[derive(Debug)]
 pub enum Node {
     Tag(Tag),
-    Text(Text),
+    Text(LitStr),
+    Expr(Expr),
 }
 
 impl Parse for Node {
     fn parse(input: ParseStream) -> Result<Self> {
-        let res = if input.fork().parse::<Text>().is_ok() {
+        let res = if input.peek(token::Paren) {
+            let expr;
+            parenthesized!(expr in input);
+            Node::Expr(expr.parse()?)
+        } else if input.peek(LitStr) {
             Node::Text(input.parse()?)
         } else {
             Node::Tag(input.parse()?)
@@ -108,22 +113,4 @@ pub enum AttrValue {
     Str(LitStr),
     Expr(Expr),
     True,
-}
-
-#[derive(Debug)]
-pub enum Text {
-    Str(LitStr),
-    Expr(Expr),
-}
-
-impl Parse for Text {
-    fn parse(input: ParseStream) -> Result<Self> {
-        if input.peek(token::Paren) {
-            let expr;
-            parenthesized!(expr in input);
-            Ok(Text::Expr(expr.parse()?))
-        } else {
-            Ok(Text::Str(input.parse()?))
-        }
-    }
 }

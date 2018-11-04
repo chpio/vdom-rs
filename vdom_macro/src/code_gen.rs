@@ -1,26 +1,12 @@
-use crate::parser::{Attr, AttrValue, Node, Tag, Text};
-use quote::{__rt::TokenStream, quote};
+use crate::parser::{Attr, AttrValue, Node, Tag};
+use quote::{__rt::TokenStream, quote, ToTokens};
 use syn::LitStr;
 
 pub fn gen_node(node: Node) -> TokenStream {
     match node {
         Node::Tag(tag) => gen_tag(tag),
-        Node::Text(text) => gen_text(text),
-    }
-}
-
-fn gen_text(text: Text) -> TokenStream {
-    match text {
-        Text::Str(lit_str) => {
-            quote!{
-                vdom::vdom::node::TextStatic::new(#lit_str)
-            }
-        }
-        Text::Expr(expr) => {
-            quote!{
-                vdom::vdom::node::TextDyn::new(#expr)
-            }
-        }
+        Node::Text(lit_str) => quote!{vdom::vdom::node::TextStatic::new(#lit_str)},
+        Node::Expr(expr) => expr.into_token_stream(),
     }
 }
 
