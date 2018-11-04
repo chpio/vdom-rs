@@ -3,7 +3,7 @@ use vdom::{
     driver::Driver,
     vdom::{
         attr::{Attr, AttrRefValue, AttrVisitor},
-        node::{Node, NodeVisitor, Tag, Text},
+        node::{Node, NodeDiffer, NodeVisitor, Tag, Text},
         path::Path,
     },
 };
@@ -179,5 +179,60 @@ impl<'a> AttrVisitor<WebDriver> for AttrAddVisitor<'a> {
                 .set_attribute(attr.name(), value)
                 .unwrap();
         }
+    }
+}
+
+struct NodeStdDiffer<'a> {
+    parent_element: &'a web::Element,
+}
+
+impl<'a> NodeDiffer<WebDriver> for NodeStdDiffer<'a> {
+    fn on_node_added<N>(&mut self, path: &Path<'_>, curr: &mut N)
+    where
+        N: Node<WebDriver>,
+    {
+        curr.visit(
+            path,
+            &mut NodeAddVisitor {
+                parent_element: &self.parent_element,
+            },
+        );
+    }
+
+    fn on_node_removed<N>(&mut self, path: &Path<'_>, ancestor: &mut N)
+    where
+        N: Node<WebDriver>,
+    {
+        ancestor.visit(path, &mut NodeRemoveVisitor);
+    }
+
+    fn on_tag<T>(&mut self, path: &Path<'_>, curr: &mut T, ancestor: &mut T)
+    where
+        T: Tag<WebDriver>,
+    {
+        let elem = ancestor
+            .driver_store()
+            .element
+            .take()
+            .expect("element is None");
+        curr.diff_children(
+            path,
+            ancestor,
+            &mut NodeStdDiffer {
+                parent_element: &elem,
+            },
+        );
+        curr.driver_store().element = Some(elem);
+    }
+
+    fn on_text<T>(&mut self, path: &Path<'_>, curr: &mut T, ancestor: &mut T)
+    where
+        T: Text<WebDriver>,
+    {
+        let text = ancestor.driver_store().text.take().expect("text is None");
+        if curr.get() != ancestor.get() {
+            AsRef::<web::CharacterData>::as_ref(&text).set_data(curr.get());
+        }
+        curr.driver_store().text = Some(text);
     }
 }
