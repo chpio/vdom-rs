@@ -542,3 +542,30 @@ where
         index + 1
     }
 }
+
+impl<D, N> Node<D> for Option<N>
+where
+    D: Driver,
+    N: Node<D>,
+{
+    fn visit<NV>(&mut self, path: &Path<'_>, visitor: &mut NV)
+    where
+        NV: NodeVisitor<D>,
+    {
+        if let Some(node) = self {
+            node.visit(path, visitor);
+        }
+    }
+
+    fn diff<ND>(&mut self, path: &Path<'_>, ancestor: &mut Self, differ: &mut ND)
+    where
+        ND: NodeDiffer<D>,
+    {
+        match (self, ancestor) {
+            (Some(curr), Some(ancestor)) => curr.diff(path, ancestor, differ),
+            (Some(curr), None) => differ.on_node_added(path, curr),
+            (None, Some(ancestor)) => differ.on_node_removed(path, ancestor),
+            (None, None) => {}
+        }
+    }
+}
