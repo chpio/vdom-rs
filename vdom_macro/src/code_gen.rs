@@ -2,7 +2,20 @@ use crate::parser::{Attr, AttrValue, Node, Tag};
 use quote::{__rt::TokenStream, quote, ToTokens};
 use syn::LitStr;
 
-pub fn gen_node(node: Node) -> TokenStream {
+pub fn gen_nodes(nodes: Vec<Node>) -> TokenStream {
+    nodes
+        .into_iter()
+        .map(gen_node)
+        .fold(None, |prev_nodes, node| {
+            match prev_nodes {
+                Some(prev_nodes) => Some(quote!{(#prev_nodes, #node)}),
+                None => Some(node),
+            }
+        })
+        .unwrap_or_else(|| quote!{()})
+}
+
+fn gen_node(node: Node) -> TokenStream {
     match node {
         Node::Tag(tag) => gen_tag(tag),
         Node::Text(lit_str) => quote!{vdom::vdom::node::TextStatic::new(#lit_str)},
@@ -12,6 +25,7 @@ pub fn gen_node(node: Node) -> TokenStream {
 
 fn gen_tag(tag: Tag) -> TokenStream {
     let tag_tag = LitStr::new(&tag.tag.to_string(), tag.tag.span());
+
     let attrs = tag
         .attrs
         .into_iter()
@@ -25,17 +39,7 @@ fn gen_tag(tag: Tag) -> TokenStream {
         })
         .unwrap_or_else(|| quote!{()});
 
-    let children = tag
-        .children
-        .into_iter()
-        .map(gen_node)
-        .fold(None, |prev_nodes, node| {
-            match prev_nodes {
-                Some(prev_nodes) => Some(quote!{(#prev_nodes, #node)}),
-                None => Some(node),
-            }
-        })
-        .unwrap_or_else(|| quote!{()});
+    let children = gen_nodes(tag.children);
 
     quote!{
         vdom::vdom::node::TagStatic::new(

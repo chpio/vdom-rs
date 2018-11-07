@@ -7,6 +7,21 @@ use syn::{
 };
 
 #[derive(Debug)]
+pub struct Nodes {
+    pub nodes: Vec<Node>,
+}
+
+impl Parse for Nodes {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let mut nodes = Vec::new();
+        while !input.is_empty() {
+            nodes.push(input.parse()?);
+        }
+        Ok(Nodes { nodes })
+    }
+}
+
+#[derive(Debug)]
 pub enum Node {
     Tag(Tag),
     Text(LitStr),
