@@ -218,7 +218,9 @@ pub trait AttrVisitor<D>
 where
     D: Driver,
 {
-    fn on_attr<A>(&mut self, attr: &mut A)
+    type Err;
+
+    fn on_attr<A>(&mut self, attr: &mut A) -> Result<(), Self::Err>
     where
         A: Attr<D>;
 }
@@ -227,7 +229,9 @@ pub trait AttrDiffer<D>
 where
     D: Driver,
 {
-    fn on_diff<A>(&mut self, curr: &mut A, ancestor: &mut A)
+    type Err;
+
+    fn on_diff<A>(&mut self, curr: &mut A, ancestor: &mut A) -> Result<(), Self::Err>
     where
         A: Attr<D>;
 }
@@ -237,11 +241,11 @@ where
     Self: Sized,
     D: Driver,
 {
-    fn visit<AV>(&mut self, visitor: &mut AV)
+    fn visit<AV>(&mut self, visitor: &mut AV) -> Result<(), AV::Err>
     where
         AV: AttrVisitor<D>;
 
-    fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD)
+    fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD) -> Result<(), AD::Err>
     where
         AD: AttrDiffer<D>;
 
@@ -259,20 +263,22 @@ where
     L1: AttrList<D>,
     L2: AttrList<D>,
 {
-    fn visit<AV>(&mut self, visitor: &mut AV)
+    fn visit<AV>(&mut self, visitor: &mut AV) -> Result<(), AV::Err>
     where
         AV: AttrVisitor<D>,
     {
-        self.0.visit(visitor);
-        self.1.visit(visitor);
+        self.0.visit(visitor)?;
+        self.1.visit(visitor)?;
+        Ok(())
     }
 
-    fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD)
+    fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD) -> Result<(), AD::Err>
     where
         AD: AttrDiffer<D>,
     {
-        self.0.diff(&mut ancestor.0, differ);
-        self.1.diff(&mut ancestor.1, differ);
+        self.0.diff(&mut ancestor.0, differ)?;
+        self.1.diff(&mut ancestor.1, differ)?;
+        Ok(())
     }
 }
 
@@ -280,16 +286,18 @@ impl<D> AttrList<D> for ()
 where
     D: Driver,
 {
-    fn visit<AV>(&mut self, visitor: &mut AV)
+    fn visit<AV>(&mut self, visitor: &mut AV) -> Result<(), AV::Err>
     where
         AV: AttrVisitor<D>,
     {
+        Ok(())
     }
 
-    fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD)
+    fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD) -> Result<(), AD::Err>
     where
         AD: AttrDiffer<D>,
     {
+        Ok(())
     }
 }
 
@@ -300,14 +308,14 @@ where
     A: Attr<D>,
     D: Driver,
 {
-    fn visit<AV>(&mut self, visitor: &mut AV)
+    fn visit<AV>(&mut self, visitor: &mut AV) -> Result<(), AV::Err>
     where
         AV: AttrVisitor<D>,
     {
-        visitor.on_attr(&mut self.0);
+        visitor.on_attr(&mut self.0)
     }
 
-    fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD)
+    fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD) -> Result<(), AD::Err>
     where
         AD: AttrDiffer<D>,
     {
@@ -321,6 +329,7 @@ where
             }
         };
 
-        differ.on_diff(&mut self.0, &mut ancestor.0);
+        differ.on_diff(&mut self.0, &mut ancestor.0)?;
+        Ok(())
     }
 }
