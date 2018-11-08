@@ -1,3 +1,4 @@
+use crate::Error;
 use vdom::{
     comp::Comp,
     driver::Driver,
@@ -55,23 +56,23 @@ impl<C> App<C>
 where
     C: Comp<WebDriver>,
 {
-    pub fn new(comp: C, comp_input: C::Input, root_element: web::Element) -> App<C> {
+    pub fn new(comp: C, comp_input: C::Input, root_element: web::Element) -> Result<App<C>, Error> {
         let mut last_rendered = comp.render(&comp_input);
         last_rendered.visit(
             &mut 0,
             &mut NodeAddVisitor {
                 parent_element: &root_element,
             },
-        );
-        App {
+        )?;
+        Ok(App {
             root_element,
             comp,
             last_rendered,
             comp_input,
-        }
+        })
     }
 
-    pub fn set_input(&mut self, comp_input: C::Input) {
+    pub fn set_input(&mut self, comp_input: C::Input) -> Result<(), Error> {
         self.comp_input = comp_input;
         let mut curr_rendered = self.comp.render(&self.comp_input);
         curr_rendered.diff(
@@ -81,8 +82,9 @@ where
             &mut NodeStdDiffer {
                 parent_element: &self.root_element,
             },
-        );
+        )?;
         self.last_rendered = curr_rendered;
+        Ok(())
     }
 }
 
@@ -91,16 +93,17 @@ struct NodeAddVisitor<'a> {
 }
 
 impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
-    fn on_tag<T>(&mut self, index: usize, tag: &mut T)
+    type Err = Error;
+
+    fn on_tag<T>(&mut self, index: usize, tag: &mut T) -> Result<(), Error>
     where
         T: Tag<WebDriver>,
     {
         let elem = web::window()
-            .unwrap()
+            .ok_or("window is None")?
             .document()
-            .unwrap()
-            .create_element(tag.tag())
-            .unwrap();
+            .ok_or("document is None")?
+            .create_element(tag.tag())?;
         tag.visit_attr(&mut AttrAddVisitor {
             parent_element: &elem,
         });
@@ -108,39 +111,39 @@ impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
             parent_element: &elem,
         });
         let parent_node = AsRef::<web::Node>::as_ref(&self.parent_element);
-        parent_node
-            .insert_before(
-                elem.as_ref(),
-                parent_node.child_nodes().get(index as u32).as_ref(),
-            )
-            .unwrap();
+        parent_node.insert_before(
+            elem.as_ref(),
+            parent_node.child_nodes().get(index as u32).as_ref(),
+        )?;
         tag.driver_store().element = Some(elem);
+        Ok(())
     }
 
-    fn on_text<T>(&mut self, index: usize, text: &mut T)
+    fn on_text<T>(&mut self, index: usize, text: &mut T) -> Result<(), Error>
     where
         T: Text<WebDriver>,
     {
         let text_node = web::window()
-            .unwrap()
+            .ok_or("window is None")?
             .document()
-            .unwrap()
+            .ok_or("document is None")?
             .create_text_node(text.get());
         let parent_node = AsRef::<web::Node>::as_ref(&self.parent_element);
-        parent_node
-            .insert_before(
-                text_node.as_ref(),
-                parent_node.child_nodes().get(index as u32).as_ref(),
-            )
-            .unwrap();
+        parent_node.insert_before(
+            text_node.as_ref(),
+            parent_node.child_nodes().get(index as u32).as_ref(),
+        )?;
         text.driver_store().text = Some(text_node);
+        Ok(())
     }
 }
 
 struct NodeRemoveVisitor;
 
 impl NodeVisitor<WebDriver> for NodeRemoveVisitor {
-    fn on_tag<T>(&mut self, _index: usize, tag: &mut T)
+    type Err = Error;
+
+    fn on_tag<T>(&mut self, _index: usize, tag: &mut T) -> Result<(), Error>
     where
         T: Tag<WebDriver>,
     {
@@ -148,19 +151,21 @@ impl NodeVisitor<WebDriver> for NodeRemoveVisitor {
             .driver_store()
             .element
             .as_ref()
-            .expect("element is None");
+            .ok_or("element is None")?;
         elem.remove();
+        Ok(())
     }
 
-    fn on_text<T>(&mut self, _index: usize, text: &mut T)
+    fn on_text<T>(&mut self, _index: usize, text: &mut T) -> Result<(), Error>
     where
         T: Text<WebDriver>,
     {
-        let text_node = text.driver_store().text.as_ref().expect("text is None");
+        let text_node = text.driver_store().text.as_ref().ok_or("text is None")?;
         let node = AsRef::<web::Node>::as_ref(text_node);
         node.parent_node()
-            .expect("parent is None")
-            .remove_child(node);
+            .ok_or("text has no parent")?
+            .remove_child(node)?;
+        Ok(())
     }
 }
 
@@ -169,7 +174,9 @@ struct AttrAddVisitor<'a> {
 }
 
 impl<'a> AttrVisitor<WebDriver> for AttrAddVisitor<'a> {
-    fn on_attr<A>(&mut self, attr: &mut A)
+    type Err = Error;
+
+    fn on_attr<A>(&mut self, attr: &mut A) -> Result<(), Error>
     where
         A: Attr<WebDriver>,
     {
@@ -180,10 +187,9 @@ impl<'a> AttrVisitor<WebDriver> for AttrAddVisitor<'a> {
         };
 
         if let Some(value) = value {
-            self.parent_element
-                .set_attribute(attr.name(), value)
-                .unwrap();
+            self.parent_element.set_attribute(attr.name(), value)?;
         }
+        Ok(())
     }
 }
 
@@ -192,7 +198,9 @@ struct NodeStdDiffer<'a> {
 }
 
 impl<'a> NodeDiffer<WebDriver> for NodeStdDiffer<'a> {
-    fn on_node_added<N>(&mut self, index: &mut usize, curr: &mut N)
+    type Err = Error;
+
+    fn on_node_added<N>(&mut self, index: &mut usize, curr: &mut N) -> Result<(), Error>
     where
         N: Node<WebDriver>,
     {
@@ -201,14 +209,18 @@ impl<'a> NodeDiffer<WebDriver> for NodeStdDiffer<'a> {
             &mut NodeAddVisitor {
                 parent_element: &self.parent_element,
             },
-        );
+        )
     }
 
-    fn on_node_removed<N>(&mut self, ancestor_index: &mut usize, ancestor: &mut N)
+    fn on_node_removed<N>(
+        &mut self,
+        ancestor_index: &mut usize,
+        ancestor: &mut N,
+    ) -> Result<(), Error>
     where
         N: Node<WebDriver>,
     {
-        ancestor.visit(ancestor_index, &mut NodeRemoveVisitor);
+        ancestor.visit(ancestor_index, &mut NodeRemoveVisitor)
     }
 
     fn on_tag<T>(
@@ -217,21 +229,23 @@ impl<'a> NodeDiffer<WebDriver> for NodeStdDiffer<'a> {
         _ancestor_index: usize,
         curr: &mut T,
         ancestor: &mut T,
-    ) where
+    ) -> Result<(), Error>
+    where
         T: Tag<WebDriver>,
     {
         let elem = ancestor
             .driver_store()
             .element
             .take()
-            .expect("element is None");
+            .ok_or("element is None")?;
         curr.diff_children(
             ancestor,
             &mut NodeStdDiffer {
                 parent_element: &elem,
             },
-        );
+        )?;
         curr.driver_store().element = Some(elem);
+        Ok(())
     }
 
     fn on_text<T>(
@@ -240,13 +254,15 @@ impl<'a> NodeDiffer<WebDriver> for NodeStdDiffer<'a> {
         _ancestor_index: usize,
         curr: &mut T,
         ancestor: &mut T,
-    ) where
+    ) -> Result<(), Error>
+    where
         T: Text<WebDriver>,
     {
-        let text = ancestor.driver_store().text.take().expect("text is None");
+        let text = ancestor.driver_store().text.take().ok_or("text is None")?;
         if curr.get() != ancestor.get() {
             AsRef::<web::CharacterData>::as_ref(&text).set_data(curr.get());
         }
         curr.driver_store().text = Some(text);
+        Ok(())
     }
 }
