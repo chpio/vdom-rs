@@ -108,22 +108,18 @@ impl<D> Attr<D> for AttrTrue<D>
 where
     D: Driver,
 {
-    #[inline]
     fn is_value_static(&self) -> bool {
         true
     }
 
-    #[inline]
     fn name(&self) -> &str {
         self.key
     }
 
-    #[inline]
     fn value(&self) -> AttrRefValue<'_> {
         AttrRefValue::True
     }
 
-    #[inline]
     fn driver_store(&mut self) -> &mut D::AttrStore {
         &mut self.driver_store
     }
@@ -155,22 +151,18 @@ impl<D> Attr<D> for AttrStr<D>
 where
     D: Driver,
 {
-    #[inline]
     fn is_value_static(&self) -> bool {
         true
     }
 
-    #[inline]
     fn name(&self) -> &str {
         self.key
     }
 
-    #[inline]
     fn value(&self) -> AttrRefValue<'_> {
         AttrRefValue::Str(self.value)
     }
 
-    #[inline]
     fn driver_store(&mut self) -> &mut D::AttrStore {
         &mut self.driver_store
     }
@@ -205,22 +197,18 @@ impl<D> Attr<D> for AttrDyn<D>
 where
     D: Driver,
 {
-    #[inline]
     fn is_value_static(&self) -> bool {
         false
     }
 
-    #[inline]
     fn name(&self) -> &str {
         self.key
     }
 
-    #[inline]
     fn value(&self) -> AttrRefValue<'_> {
         (&self.value).into()
     }
 
-    #[inline]
     fn driver_store(&mut self) -> &mut D::AttrStore {
         &mut self.driver_store
     }

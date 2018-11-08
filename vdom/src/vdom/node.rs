@@ -124,17 +124,14 @@ where
     C: Node<D>,
     A: AttrList<D>,
 {
-    #[inline]
     fn is_tag_static(&self) -> bool {
         true
     }
 
-    #[inline]
     fn tag(&self) -> &str {
         self.tag
     }
 
-    #[inline]
     fn visit_children<NV>(&mut self, visitor: &mut NV)
     where
         NV: NodeVisitor<D>,
@@ -142,7 +139,6 @@ where
         self.children.visit(&mut 0, visitor);
     }
 
-    #[inline]
     fn diff_children<ND>(&mut self, ancestor: &mut Self, differ: &mut ND)
     where
         ND: NodeDiffer<D>,
@@ -151,7 +147,6 @@ where
             .diff(&mut 0, &mut 0, &mut ancestor.children, differ);
     }
 
-    #[inline]
     fn visit_attr<AV>(&mut self, visitor: &mut AV)
     where
         AV: AttrVisitor<D>,
@@ -159,7 +154,6 @@ where
         self.attrs.visit(visitor);
     }
 
-    #[inline]
     fn diff_attr<AD>(&mut self, ancestor: &mut Self, differ: &mut AD)
     where
         AD: AttrDiffer<D>,
@@ -167,7 +161,6 @@ where
         self.attrs.diff(&mut ancestor.attrs, differ);
     }
 
-    #[inline]
     fn driver_store(&mut self) -> &mut D::TagStore {
         &mut self.driver_store
     }
@@ -179,7 +172,6 @@ where
     C: Node<D>,
     A: AttrList<D>,
 {
-    #[inline]
     fn visit<NV>(&mut self, index: &mut usize, visitor: &mut NV)
     where
         NV: NodeVisitor<D>,
@@ -188,7 +180,6 @@ where
         *index += 1;
     }
 
-    #[inline]
     fn diff<ND>(
         &mut self,
         curr_index: &mut usize,
@@ -241,17 +232,14 @@ where
     C: Node<D>,
     A: AttrList<D>,
 {
-    #[inline]
     fn is_tag_static(&self) -> bool {
         false
     }
 
-    #[inline]
     fn tag(&self) -> &str {
         self.tag.as_ref()
     }
 
-    #[inline]
     fn visit_children<NV>(&mut self, visitor: &mut NV)
     where
         NV: NodeVisitor<D>,
@@ -259,7 +247,6 @@ where
         self.children.visit(&mut 0, visitor);
     }
 
-    #[inline]
     fn diff_children<ND>(&mut self, ancestor: &mut Self, differ: &mut ND)
     where
         ND: NodeDiffer<D>,
@@ -268,7 +255,6 @@ where
             .diff(&mut 0, &mut 0, &mut ancestor.children, differ);
     }
 
-    #[inline]
     fn visit_attr<AV>(&mut self, visitor: &mut AV)
     where
         AV: AttrVisitor<D>,
@@ -276,7 +262,6 @@ where
         self.attrs.visit(visitor);
     }
 
-    #[inline]
     fn diff_attr<AD>(&mut self, ancestor: &mut Self, differ: &mut AD)
     where
         AD: AttrDiffer<D>,
@@ -284,7 +269,6 @@ where
         self.attrs.diff(&mut ancestor.attrs, differ);
     }
 
-    #[inline]
     fn driver_store(&mut self) -> &mut D::TagStore {
         &mut self.driver_store
     }
@@ -296,7 +280,6 @@ where
     C: Node<D>,
     A: AttrList<D>,
 {
-    #[inline]
     fn visit<NV>(&mut self, index: &mut usize, visitor: &mut NV)
     where
         NV: NodeVisitor<D>,
@@ -305,7 +288,6 @@ where
         *index += 1;
     }
 
-    #[inline]
     fn diff<ND>(
         &mut self,
         curr_index: &mut usize,
@@ -354,17 +336,14 @@ impl<D> Text<D> for TextStatic<D>
 where
     D: Driver,
 {
-    #[inline]
     fn is_static(&self) -> bool {
         true
     }
 
-    #[inline]
     fn get(&self) -> &str {
         &self.text
     }
 
-    #[inline]
     fn driver_store(&mut self) -> &mut D::TextStore {
         &mut self.driver_store
     }
@@ -374,7 +353,6 @@ impl<D> Node<D> for TextStatic<D>
 where
     D: Driver,
 {
-    #[inline]
     fn visit<NV>(&mut self, index: &mut usize, visitor: &mut NV)
     where
         NV: NodeVisitor<D>,
@@ -383,7 +361,6 @@ where
         *index += 1;
     }
 
-    #[inline]
     fn diff<ND>(
         &mut self,
         curr_index: &mut usize,
@@ -427,17 +404,14 @@ impl<D> Text<D> for TextDyn<D>
 where
     D: Driver,
 {
-    #[inline]
     fn is_static(&self) -> bool {
         false
     }
 
-    #[inline]
     fn get(&self) -> &str {
         self.text.as_ref()
     }
 
-    #[inline]
     fn driver_store(&mut self) -> &mut D::TextStore {
         &mut self.driver_store
     }
@@ -447,7 +421,6 @@ impl<D> Node<D> for TextDyn<D>
 where
     D: Driver,
 {
-    #[inline]
     fn visit<NV>(&mut self, index: &mut usize, visitor: &mut NV)
     where
         NV: NodeVisitor<D>,
@@ -456,7 +429,6 @@ where
         *index += 1;
     }
 
-    #[inline]
     fn diff<ND>(
         &mut self,
         curr_index: &mut usize,
@@ -478,7 +450,6 @@ where
     L1: Node<D>,
     L2: Node<D>,
 {
-    #[inline]
     fn visit<NV>(&mut self, index: &mut usize, visitor: &mut NV)
     where
         NV: NodeVisitor<D>,
@@ -487,7 +458,6 @@ where
         self.1.visit(index, visitor);
     }
 
-    #[inline]
     fn diff<ND>(
         &mut self,
         curr_index: &mut usize,
@@ -508,14 +478,12 @@ impl<D> Node<D> for ()
 where
     D: Driver,
 {
-    #[inline]
     fn visit<NV>(&mut self, index: &mut usize, visitor: &mut NV)
     where
         NV: NodeVisitor<D>,
     {
     }
 
-    #[inline]
     fn diff<ND>(
         &mut self,
         curr_index: &mut usize,
