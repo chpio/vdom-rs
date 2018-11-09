@@ -104,7 +104,7 @@ impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
             .document()
             .ok_or("document is None")?
             .create_element(tag.tag())?;
-        tag.visit_attr(&mut AttrAddVisitor {
+        tag.visit_attrs(&mut AttrAddVisitor {
             parent_element: &elem,
         })?;
         tag.visit_children(&mut NodeAddVisitor {
@@ -232,7 +232,7 @@ impl<'a> NodeDiffer<WebDriver> for NodeStdDiffer<'a> {
             .element
             .take()
             .ok_or("element is None")?;
-        curr.diff_attr(
+        curr.diff_attrs(
             ancestor,
             &mut AttrStdDiffer {
                 parent_element: &elem,

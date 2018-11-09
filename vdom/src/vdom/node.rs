@@ -92,11 +92,11 @@ where
     where
         ND: NodeDiffer<D>;
 
-    fn visit_attr<NV>(&mut self, visitor: &mut NV) -> Result<(), NV::Err>
+    fn visit_attrs<NV>(&mut self, visitor: &mut NV) -> Result<(), NV::Err>
     where
         NV: AttrVisitor<D>;
 
-    fn diff_attr<AD>(&mut self, ancestor: &mut Self, differ: &mut AD) -> Result<(), AD::Err>
+    fn diff_attrs<AD>(&mut self, ancestor: &mut Self, differ: &mut AD) -> Result<(), AD::Err>
     where
         AD: AttrDiffer<D>;
 
@@ -158,14 +158,14 @@ where
             .diff(&mut 0, &mut 0, &mut ancestor.children, differ)
     }
 
-    fn visit_attr<AV>(&mut self, visitor: &mut AV) -> Result<(), AV::Err>
+    fn visit_attrs<AV>(&mut self, visitor: &mut AV) -> Result<(), AV::Err>
     where
         AV: AttrVisitor<D>,
     {
         self.attrs.visit(visitor)
     }
 
-    fn diff_attr<AD>(&mut self, ancestor: &mut Self, differ: &mut AD) -> Result<(), AD::Err>
+    fn diff_attrs<AD>(&mut self, ancestor: &mut Self, differ: &mut AD) -> Result<(), AD::Err>
     where
         AD: AttrDiffer<D>,
     {
@@ -269,14 +269,14 @@ where
             .diff(&mut 0, &mut 0, &mut ancestor.children, differ)
     }
 
-    fn visit_attr<AV>(&mut self, visitor: &mut AV) -> Result<(), AV::Err>
+    fn visit_attrs<AV>(&mut self, visitor: &mut AV) -> Result<(), AV::Err>
     where
         AV: AttrVisitor<D>,
     {
         self.attrs.visit(visitor)
     }
 
-    fn diff_attr<AD>(&mut self, ancestor: &mut Self, differ: &mut AD) -> Result<(), AD::Err>
+    fn diff_attrs<AD>(&mut self, ancestor: &mut Self, differ: &mut AD) -> Result<(), AD::Err>
     where
         AD: AttrDiffer<D>,
     {
