@@ -3,7 +3,7 @@ use vdom::{
     comp::Comp,
     driver::Driver,
     vdom::{
-        attr::{Attr, AttrRefValue, AttrVisitor},
+        attr::{Attr, AttrDiffer, AttrRefValue, AttrVisitor},
         node::{Node, NodeDiffer, NodeVisitor, Tag, Text},
     },
 };
@@ -106,10 +106,10 @@ impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
             .create_element(tag.tag())?;
         tag.visit_attr(&mut AttrAddVisitor {
             parent_element: &elem,
-        });
+        })?;
         tag.visit_children(&mut NodeAddVisitor {
             parent_element: &elem,
-        });
+        })?;
         let parent_node = AsRef::<web::Node>::as_ref(&self.parent_element);
         parent_node.insert_before(
             elem.as_ref(),
@@ -180,13 +180,7 @@ impl<'a> AttrVisitor<WebDriver> for AttrAddVisitor<'a> {
     where
         A: Attr<WebDriver>,
     {
-        let value = match attr.value() {
-            AttrRefValue::True => Some(attr.name()),
-            AttrRefValue::Null => None,
-            AttrRefValue::Str(s) => Some(s),
-        };
-
-        if let Some(value) = value {
+        if let Some(value) = attr_to_str(attr) {
             self.parent_element.set_attribute(attr.name(), value)?;
         }
         Ok(())
@@ -238,6 +232,12 @@ impl<'a> NodeDiffer<WebDriver> for NodeStdDiffer<'a> {
             .element
             .take()
             .ok_or("element is None")?;
+        curr.diff_attr(
+            ancestor,
+            &mut AttrStdDiffer {
+                parent_element: &elem,
+            },
+        )?;
         curr.diff_children(
             ancestor,
             &mut NodeStdDiffer {
@@ -264,5 +264,45 @@ impl<'a> NodeDiffer<WebDriver> for NodeStdDiffer<'a> {
         }
         curr.driver_store().text = Some(text);
         Ok(())
+    }
+}
+
+struct AttrStdDiffer<'a> {
+    parent_element: &'a web::Element,
+}
+
+impl<'a> AttrDiffer<WebDriver> for AttrStdDiffer<'a> {
+    type Err = Error;
+
+    fn on_diff<A>(&mut self, curr: &mut A, ancestor: &mut A) -> Result<(), Error>
+    where
+        A: Attr<WebDriver>,
+    {
+        match (attr_to_str(curr), attr_to_str(ancestor)) {
+            (Some(curr_val), Some(ancestor_val)) => {
+                if curr_val != ancestor_val {
+                    self.parent_element.set_attribute(curr.name(), curr_val)?;
+                }
+            }
+            (Some(curr_val), None) => {
+                self.parent_element.set_attribute(curr.name(), curr_val)?;
+            }
+            (None, Some(_)) => {
+                self.parent_element.remove_attribute(curr.name())?;
+            }
+            (None, None) => {}
+        }
+        Ok(())
+    }
+}
+
+fn attr_to_str<A>(attr: &A) -> Option<&str>
+where
+    A: Attr<WebDriver>,
+{
+    match attr.value() {
+        AttrRefValue::True => Some(attr.name()),
+        AttrRefValue::Null => None,
+        AttrRefValue::Str(s) => Some(s),
     }
 }
