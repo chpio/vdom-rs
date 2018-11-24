@@ -8,17 +8,17 @@ pub fn gen_nodes(nodes: Vec<Node>) -> TokenStream {
         .map(gen_node)
         .fold(None, |prev_nodes, node| {
             match prev_nodes {
-                Some(prev_nodes) => Some(quote!{(#prev_nodes, #node)}),
+                Some(prev_nodes) => Some(quote! {(#prev_nodes, #node)}),
                 None => Some(node),
             }
         })
-        .unwrap_or_else(|| quote!{()})
+        .unwrap_or_else(|| quote! {()})
 }
 
 fn gen_node(node: Node) -> TokenStream {
     match node {
         Node::Tag(tag) => gen_tag(tag),
-        Node::Text(lit_str) => quote!{vdom::vdom::node::TextStatic::new(#lit_str)},
+        Node::Text(lit_str) => quote! {vdom::vdom::node::TextStatic::new(#lit_str)},
         Node::Expr(expr) => expr.into_token_stream(),
     }
 }
@@ -30,18 +30,18 @@ fn gen_tag(tag: Tag) -> TokenStream {
         .attrs
         .into_iter()
         .map(gen_attr)
-        .map(|attr| quote!{vdom::vdom::attr::AttrListEntry(#attr)})
+        .map(|attr| quote! {vdom::vdom::attr::AttrListEntry(#attr)})
         .fold(None, |prev_attrs, attr| {
             match prev_attrs {
-                Some(prev_attrs) => Some(quote!{(#prev_attrs, #attr)}),
+                Some(prev_attrs) => Some(quote! {(#prev_attrs, #attr)}),
                 None => Some(attr),
             }
         })
-        .unwrap_or_else(|| quote!{()});
+        .unwrap_or_else(|| quote! {()});
 
     let children = gen_nodes(tag.children);
 
-    quote!{
+    quote! {
         vdom::vdom::node::TagStatic::new(
             #tag_tag,
             #attrs,
@@ -55,7 +55,7 @@ fn gen_attr(attr: Attr) -> TokenStream {
 
     match attr.value {
         AttrValue::Str(lit_str) => {
-            quote!{
+            quote! {
                 vdom::vdom::attr::AttrStr::new(
                     #name,
                     #lit_str
@@ -63,12 +63,12 @@ fn gen_attr(attr: Attr) -> TokenStream {
             }
         }
         AttrValue::Expr(expr) => {
-            quote!{
+            quote! {
                 vdom::vdom::attr::AttrDyn::new(#name, #expr)
             }
         }
         AttrValue::True => {
-            quote!{
+            quote! {
                 vdom::vdom::attr::AttrTrue::new(#name)
             }
         }

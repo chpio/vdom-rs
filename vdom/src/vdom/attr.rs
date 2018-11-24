@@ -321,7 +321,7 @@ where
     {
         debug_assert_eq!(self.0.name(), ancestor.0.name());
 
-        debug_assert!{
+        debug_assert! {
             if self.0.is_value_static() {
                 self.0.value() == ancestor.0.value()
             } else {
