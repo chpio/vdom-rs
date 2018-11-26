@@ -478,8 +478,7 @@ where
         NV: NodeVisitor<D>,
     {
         self.0.visit(index, visitor)?;
-        self.1.visit(index, visitor)?;
-        Ok(())
+        self.1.visit(index, visitor)
     }
 
     fn diff<ND>(
@@ -495,8 +494,7 @@ where
         self.0
             .diff(curr_index, ancestor_index, &mut ancestor.0, differ)?;
         self.1
-            .diff(curr_index, ancestor_index, &mut ancestor.1, differ)?;
-        Ok(())
+            .diff(curr_index, ancestor_index, &mut ancestor.1, differ)
     }
 }
 
@@ -535,9 +533,10 @@ where
         NV: NodeVisitor<D>,
     {
         if let Some(node) = self {
-            node.visit(index, visitor)?;
+            node.visit(index, visitor)
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     fn diff<ND>(
@@ -551,14 +550,11 @@ where
         ND: NodeDiffer<D>,
     {
         match (self, ancestor) {
-            (Some(curr), Some(ancestor)) => {
-                curr.diff(curr_index, ancestor_index, ancestor, differ)?
-            }
-            (Some(curr), None) => differ.on_node_added(curr_index, curr)?,
-            (None, Some(ancestor)) => differ.on_node_removed(ancestor_index, ancestor)?,
-            (None, None) => {}
+            (Some(curr), Some(ancestor)) => curr.diff(curr_index, ancestor_index, ancestor, differ),
+            (Some(curr), None) => differ.on_node_added(curr_index, curr),
+            (None, Some(ancestor)) => differ.on_node_removed(ancestor_index, ancestor),
+            (None, None) => Ok(()),
         }
-        Ok(())
     }
 }
 

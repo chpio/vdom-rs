@@ -268,8 +268,7 @@ where
         AV: AttrVisitor<D>,
     {
         self.0.visit(visitor)?;
-        self.1.visit(visitor)?;
-        Ok(())
+        self.1.visit(visitor)
     }
 
     fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD) -> Result<(), AD::Err>
@@ -277,8 +276,7 @@ where
         AD: AttrDiffer<D>,
     {
         self.0.diff(&mut ancestor.0, differ)?;
-        self.1.diff(&mut ancestor.1, differ)?;
-        Ok(())
+        self.1.diff(&mut ancestor.1, differ)
     }
 }
 
@@ -329,7 +327,6 @@ where
             }
         };
 
-        differ.on_diff(&mut self.0, &mut ancestor.0)?;
-        Ok(())
+        differ.on_diff(&mut self.0, &mut ancestor.0)
     }
 }
