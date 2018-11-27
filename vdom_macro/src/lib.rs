@@ -1,3 +1,5 @@
+#![deny(bare_trait_objects, anonymous_parameters, elided_lifetimes_in_paths)]
+
 extern crate proc_macro;
 
 mod code_gen;

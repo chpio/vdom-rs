@@ -12,7 +12,7 @@ pub struct Nodes {
 }
 
 impl Parse for Nodes {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
         let mut nodes = Vec::new();
         while !input.is_empty() {
             nodes.push(input.parse()?);
@@ -29,7 +29,7 @@ pub enum Node {
 }
 
 impl Parse for Node {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
         let res = if input.peek(token::Paren) {
             let expr;
             parenthesized!(expr in input);
@@ -51,7 +51,7 @@ pub struct Tag {
 }
 
 impl Parse for Tag {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
         let tag = Ident::parse_any(input)?;
 
         let mut attrs = Vec::new();
@@ -88,7 +88,7 @@ pub struct Attr {
 }
 
 impl Parse for Attr {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream<'_>) -> Result<Self> {
         let name = Ident::parse_any(input)?;
 
         let value = if input.peek(Token![=]) {
