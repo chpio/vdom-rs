@@ -1,10 +1,9 @@
 use crate::Error;
 use vdom::{
-    comp::Comp,
     driver::Driver,
     vdom::{
         attr::{Attr, AttrDiffer, AttrRefValue, AttrVisitor},
-        node::{Node, NodeDiffer, NodeVisitor, Tag, Text},
+        node::{Comp, CompInstance, CompNode, Node, NodeDiffer, NodeVisitor, Tag, Text},
     },
 };
 use web_sys as web;
@@ -24,10 +23,14 @@ pub struct TextStore {
     text: Option<web::Text>,
 }
 
+#[derive(Default)]
+pub struct CompStore;
+
 impl Driver for WebDriver {
     type AttrStore = AttrStore;
     type TagStore = TagStore;
     type TextStore = TextStore;
+    type CompStore = CompStore;
 
     fn new_attr_store() -> AttrStore {
         Default::default()
@@ -40,50 +43,44 @@ impl Driver for WebDriver {
     fn new_text_store() -> TextStore {
         Default::default()
     }
+
+    fn new_comp_store() -> CompStore {
+        Default::default()
+    }
 }
 
-pub struct App<C>
+pub struct App<N>
 where
-    C: Comp<WebDriver>,
+    N: Node<WebDriver>,
 {
     root_element: web::Element,
-    comp: C,
-    comp_input: C::Input,
-    last_rendered: C::Rendered,
+    node: N,
 }
 
-impl<C> App<C>
+impl<N> App<N>
 where
-    C: Comp<WebDriver>,
+    N: Node<WebDriver>,
 {
-    pub fn new(comp: C, comp_input: C::Input, root_element: web::Element) -> Result<App<C>, Error> {
-        let mut last_rendered = comp.render(&comp_input);
-        last_rendered.visit(
+    pub fn new(mut node: N, root_element: web::Element) -> Result<App<N>, Error> {
+        node.visit(
             &mut 0,
             &mut NodeAddVisitor {
                 parent_element: &root_element,
             },
         )?;
-        Ok(App {
-            root_element,
-            comp,
-            last_rendered,
-            comp_input,
-        })
+        Ok(App { root_element, node })
     }
 
-    pub fn set_input(&mut self, comp_input: C::Input) -> Result<(), Error> {
-        self.comp_input = comp_input;
-        let mut curr_rendered = self.comp.render(&self.comp_input);
-        curr_rendered.diff(
+    pub fn set(&mut self, mut node: N) -> Result<(), Error> {
+        node.diff(
             &mut 0,
             &mut 0,
-            &mut self.last_rendered,
+            &mut self.node,
             &mut NodeStdDiffer {
                 parent_element: &self.root_element,
             },
         )?;
-        self.last_rendered = curr_rendered;
+        self.node = node;
         Ok(())
     }
 }
@@ -136,6 +133,18 @@ impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
         text.driver_store().text = Some(text_node);
         Ok(())
     }
+
+    fn on_comp<C>(
+        &mut self,
+        index: &mut usize,
+        comp: &mut CompNode<WebDriver, C>,
+    ) -> Result<(), Self::Err>
+    where
+        C: Comp<WebDriver>,
+    {
+        comp.set_comp_instance(CompInstance::new(C::new()));
+        comp.visit_rendered(index, self)
+    }
 }
 
 struct NodeRemoveVisitor;
@@ -166,6 +175,17 @@ impl NodeVisitor<WebDriver> for NodeRemoveVisitor {
             .ok_or("text has no parent")?
             .remove_child(node)?;
         Ok(())
+    }
+
+    fn on_comp<C>(
+        &mut self,
+        index: &mut usize,
+        comp: &mut CompNode<WebDriver, C>,
+    ) -> Result<(), Self::Err>
+    where
+        C: Comp<WebDriver>,
+    {
+        comp.visit_rendered(index, self)
     }
 }
 
@@ -264,6 +284,21 @@ impl<'a> NodeDiffer<WebDriver> for NodeStdDiffer<'a> {
         }
         curr.driver_store().text = Some(text);
         Ok(())
+    }
+
+    fn on_comp<C>(
+        &mut self,
+        curr_index: &mut usize,
+        ancestor_index: &mut usize,
+        curr: &mut CompNode<WebDriver, C>,
+        ancestor: &mut CompNode<WebDriver, C>,
+    ) -> Result<(), Self::Err>
+    where
+        C: Comp<WebDriver>,
+    {
+        let comp = ancestor.comp_instance().ok_or("CompInstance is None")?;
+        curr.set_comp_instance(comp.clone());
+        curr.diff_rendered(curr_index, ancestor_index, ancestor, self)
     }
 }
 

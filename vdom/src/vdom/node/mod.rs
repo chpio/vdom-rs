@@ -1,8 +1,10 @@
+mod comp;
 mod tag;
 mod text;
 
 use std::borrow::Cow;
 
+pub use self::comp::*;
 pub use self::tag::*;
 pub use self::text::*;
 use super::attr::{AttrDiffer, AttrList, AttrVisitor};
@@ -21,6 +23,10 @@ where
     fn on_text<T>(&mut self, index: usize, text: &mut T) -> Result<(), Self::Err>
     where
         T: Text<D>;
+
+    fn on_comp<C>(&mut self, index: &mut usize, comp: &mut CompNode<D, C>) -> Result<(), Self::Err>
+    where
+        C: Comp<D>;
 }
 
 pub trait NodeDiffer<D>
@@ -60,6 +66,16 @@ where
     ) -> Result<(), Self::Err>
     where
         T: Text<D>;
+
+    fn on_comp<C>(
+        &mut self,
+        curr_index: &mut usize,
+        ancestor_index: &mut usize,
+        curr: &mut CompNode<D, C>,
+        ancestor: &mut CompNode<D, C>,
+    ) -> Result<(), Self::Err>
+    where
+        C: Comp<D>;
 }
 
 pub trait Node<D>
