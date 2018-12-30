@@ -3,7 +3,7 @@ use vdom::{
     driver::Driver,
     vdom::{
         attr::{Attr, AttrDiffer, AttrRefValue, AttrVisitor},
-        node::{Comp, CompInstance, CompNode, Node, NodeDiffer, NodeVisitor, Tag, Text},
+        node::{Comp, CompNode, Node, NodeDiffer, NodeVisitor, Tag, Text},
     },
 };
 use web_sys as web;
@@ -142,7 +142,7 @@ impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
     where
         C: Comp<WebDriver>,
     {
-        comp.set_comp_instance(CompInstance::new(C::new()));
+        comp.init_comp_instance();
         comp.visit_rendered(index, self)
     }
 }
@@ -296,8 +296,12 @@ impl<'a> NodeDiffer<WebDriver> for NodeStdDiffer<'a> {
     where
         C: Comp<WebDriver>,
     {
-        let comp = ancestor.comp_instance().ok_or("CompInstance is None")?;
-        curr.set_comp_instance(comp.clone());
+        if curr.comp_instance().is_none() {
+            let instance = ancestor
+                .comp_instance()
+                .expect("ancestor.comp_wrapper is None");
+            curr.set_comp_instance(instance.clone());
+        }
         curr.diff_rendered(curr_index, ancestor_index, ancestor, self)
     }
 }

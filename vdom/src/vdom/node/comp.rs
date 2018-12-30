@@ -3,32 +3,29 @@ use crate::{
     vdom::node::{Node, NodeDiffer, NodeVisitor},
 };
 
-use std::{
-    cell::{Ref, RefCell, RefMut},
-    marker::PhantomData,
-    rc::Rc,
-};
+use std::{cell::RefCell, marker::PhantomData, mem, rc::Rc};
 
 pub trait Comp<D>
 where
     D: Driver,
     Self: Clone + Eq,
 {
-    type Input: Clone + Eq;
+    type Input: Eq;
     type Rendered: Node<D>;
 
-    fn new() -> Self;
+    fn new(input: &Self::Input) -> Self;
 
-    fn render(&self, input: &Self::Input, instance: &CompInstance<D, Self>) -> Self::Rendered;
+    fn render(&self, input: &Self::Input) -> Self::Rendered;
 }
 
-enum CompNodeContent<D, C>
+enum CompNodeCompRendered<D, C>
 where
     D: Driver,
     C: Comp<D>,
 {
-    Input(Option<C::Input>),
-    Snapshot(Snapshot<D, C>),
+    NotRendered,
+    Rendered(C, C::Rendered),
+    Taken,
 }
 
 pub struct CompNode<D, C>
@@ -36,8 +33,9 @@ where
     D: Driver,
     C: Comp<D>,
 {
-    content: CompNodeContent<D, C>,
-    instance: Option<CompInstance<D, C>>,
+    input: C::Input,
+    comp_rendered: CompNodeCompRendered<D, C>,
+    comp_instance: Option<CompInstance<D, C>>,
     driver_store: D::CompStore,
 }
 
@@ -48,19 +46,54 @@ where
 {
     pub fn new(input: C::Input) -> CompNode<D, C> {
         CompNode {
-            content: CompNodeContent::Input(Some(input)),
-            instance: None,
+            input: input,
+            comp_rendered: CompNodeCompRendered::NotRendered,
+            comp_instance: None,
             driver_store: D::new_comp_store(),
         }
+    }
+
+    pub fn input(&mut self) -> &C::Input {
+        &self.input
+    }
+
+    pub fn comp_instance(&self) -> Option<&CompInstance<D, C>> {
+        self.comp_instance.as_ref()
+    }
+
+    pub fn init_comp_instance(&mut self) {
+        self.comp_instance = Some(CompInstance::new(&self.input));
+    }
+
+    pub fn set_comp_instance(&mut self, comp_instance: CompInstance<D, C>) {
+        self.comp_instance = Some(comp_instance);
     }
 
     pub fn visit_rendered<NV>(&mut self, index: &mut usize, visitor: &mut NV) -> Result<(), NV::Err>
     where
         NV: NodeVisitor<D>,
     {
-        self.render_and_get_snapshot(None)
-            .rendered_mut()
-            .visit(index, visitor)
+        use self::CompNodeCompRendered::*;
+
+        let rendered = match &mut self.comp_rendered {
+            NotRendered => {
+                let comp = self
+                    .comp_instance
+                    .as_ref()
+                    .expect("wrapper is None")
+                    .comp
+                    .borrow_mut();
+                let rendered = comp.render(&self.input);
+                self.comp_rendered = Rendered(comp.clone(), rendered);
+                match &mut self.comp_rendered {
+                    Rendered(_, rendered) => rendered,
+                    _ => unreachable!(),
+                }
+            }
+            Rendered(_, rendered) => rendered,
+            Taken => panic!("comp_rendered is Taken"),
+        };
+        rendered.visit(index, visitor)
     }
 
     pub fn diff_rendered<ND>(
@@ -73,74 +106,47 @@ where
     where
         ND: NodeDiffer<D>,
     {
-        let snapshot_ancestor = match &ancestor.content {
-            CompNodeContent::Snapshot(snapshot) => snapshot,
-            _ => panic!("Ancestor `CompNode` not a rendered `Snapshot`"),
+        use self::CompNodeCompRendered::*;
+
+        let (ancestor_comp, ancestor_rendered) = match &mut ancestor.comp_rendered {
+            NotRendered => panic!("ancestor.comp_rendered is NotRendered"),
+            Rendered(ancestor_comp, ancestor_rendered) => (ancestor_comp, ancestor_rendered),
+            Taken => {
+                match &self.comp_rendered {
+                    NotRendered => panic!("self.comp_rendered is NotRendered"),
+                    Rendered(..) => return Ok(()),
+                    Taken => panic!("self.comp_rendered is Taken"),
+                }
+            }
         };
-
-        let snapshot = self.render_and_get_snapshot(Some(snapshot_ancestor));
-
-        if !snapshot.ptr_eq(snapshot_ancestor) {
-            snapshot.rendered_mut().diff(
-                curr_index,
-                ancestor_index,
-                &mut *snapshot_ancestor.rendered_mut(),
-                differ,
-            )
-        } else {
-            Ok(())
-        }
-    }
-
-    pub fn comp_instance(&self) -> Option<&CompInstance<D, C>> {
-        self.instance.as_ref()
-    }
-
-    pub fn set_comp_instance(&mut self, instance: CompInstance<D, C>) {
-        self.instance = Some(instance);
+        let rendered = match &mut self.comp_rendered {
+            NotRendered => {
+                let comp = self
+                    .comp_instance
+                    .as_ref()
+                    .expect("wrapper is None")
+                    .comp
+                    .borrow_mut();
+                let rendered = comp.render(&self.input);
+                if ancestor_comp == &*comp && ancestor.input == self.input {
+                    self.comp_rendered = mem::replace(&mut ancestor.comp_rendered, Taken);
+                    return Ok(());
+                } else {
+                    self.comp_rendered = Rendered(comp.clone(), rendered);
+                    match &mut self.comp_rendered {
+                        Rendered(_, rendered) => rendered,
+                        _ => unreachable!(),
+                    }
+                }
+            }
+            Rendered(_, rendered) => rendered,
+            Taken => panic!("self.comp_rendered is Taken"),
+        };
+        rendered.diff(curr_index, ancestor_index, ancestor_rendered, differ)
     }
 
     pub fn driver_store(&mut self) -> &mut D::CompStore {
         &mut self.driver_store
-    }
-
-    fn render_and_get_snapshot(
-        &mut self,
-        ancestor_snapshot: Option<&Snapshot<D, C>>,
-    ) -> &Snapshot<D, C> {
-        match &mut self.content {
-            content @ CompNodeContent::Input(_) => {
-                let input = match content {
-                    CompNodeContent::Input(input) => input.take().unwrap(),
-                    _ => unreachable!(),
-                };
-                let instance = match self.instance.as_ref() {
-                    Some(i) => i,
-                    None => panic!("`CompInstance` is `None`"),
-                };
-
-                let render = if let Some(ancestor_snapshot) = ancestor_snapshot {
-                    let inner = ancestor_snapshot.inner.try_borrow().unwrap();
-                    if inner.input == input && inner.state == *instance.as_ref() {
-                        *content = CompNodeContent::Snapshot(ancestor_snapshot.clone());
-                        false
-                    } else {
-                        true
-                    }
-                } else {
-                    true
-                };
-                if render {
-                    *content = CompNodeContent::Snapshot(Snapshot::new(instance, input));
-                }
-
-                match content {
-                    CompNodeContent::Snapshot(snapshot) => snapshot,
-                    _ => unreachable!(),
-                }
-            }
-            CompNodeContent::Snapshot(snapshot) => snapshot,
-        }
     }
 }
 
@@ -184,25 +190,15 @@ where
     D: Driver,
     C: Comp<D>,
 {
-    pub fn new(comp: C) -> CompInstance<D, C> {
+    pub fn new(input: &C::Input) -> CompInstance<D, C> {
         CompInstance {
-            comp: Rc::new(RefCell::new(comp)),
+            comp: Rc::new(RefCell::new(C::new(input))),
             phantom: PhantomData,
         }
     }
 
-    pub fn as_ref(&self) -> Ref<'_, C> {
-        match self.comp.try_borrow() {
-            Ok(comp) => comp,
-            Err(e) => panic!(e),
-        }
-    }
-
-    pub fn as_mut(&self) -> RefMut<'_, C> {
-        match self.comp.try_borrow_mut() {
-            Ok(comp) => comp,
-            Err(e) => panic!(e),
-        }
+    pub fn comp(&self) -> &Rc<RefCell<C>> {
+        &self.comp
     }
 }
 
@@ -215,110 +211,6 @@ where
         CompInstance {
             comp: self.comp.clone(),
             phantom: PhantomData,
-        }
-    }
-}
-
-struct SnapshotInner<D, C>
-where
-    D: Driver,
-    C: Comp<D>,
-{
-    state: C,
-    input: C::Input,
-    rendered: Option<C::Rendered>,
-}
-
-pub struct Snapshot<D, C>
-where
-    D: Driver,
-    C: Comp<D>,
-{
-    inner: Rc<RefCell<SnapshotInner<D, C>>>,
-}
-
-impl<D, C> Snapshot<D, C>
-where
-    D: Driver,
-    C: Comp<D>,
-{
-    pub fn new(instance: &CompInstance<D, C>, input: C::Input) -> Snapshot<D, C> {
-        let mut inner = Rc::new(RefCell::new(SnapshotInner {
-            state: instance.as_ref().clone(),
-            input,
-            rendered: None,
-        }));
-
-        match Rc::get_mut(&mut inner) {
-            Some(pinned) => {
-                let pinned = pinned.get_mut();
-                pinned.rendered = Some(pinned.state.render(&pinned.input, instance));
-            }
-            None => unreachable!(),
-        }
-
-        Snapshot { inner }
-    }
-
-    fn map<F, R>(&self, f: F) -> Ref<'_, R>
-    where
-        F: FnOnce(&SnapshotInner<D, C>) -> &R,
-    {
-        match self.inner.try_borrow() {
-            Ok(inner) => Ref::map(inner, |inner| f(inner)),
-            Err(e) => panic!(e),
-        }
-    }
-
-    fn map_mut<F, R>(&self, f: F) -> RefMut<'_, R>
-    where
-        F: FnOnce(&mut SnapshotInner<D, C>) -> &mut R,
-    {
-        match self.inner.try_borrow_mut() {
-            Ok(inner) => RefMut::map(inner, |inner| f(inner)),
-            Err(e) => panic!(e),
-        }
-    }
-
-    pub fn state(&self) -> Ref<'_, C> {
-        self.map(|inner| &inner.state)
-    }
-
-    pub fn input(&self) -> Ref<'_, C::Input> {
-        self.map(|inner| &inner.input)
-    }
-
-    pub fn rendered(&self) -> Ref<'_, C::Rendered> {
-        self.map(|inner| {
-            match &inner.rendered {
-                Some(rendered) => rendered,
-                None => unreachable!(),
-            }
-        })
-    }
-
-    pub fn rendered_mut(&self) -> RefMut<'_, C::Rendered> {
-        self.map_mut(|inner| {
-            match &mut inner.rendered {
-                Some(rendered) => rendered,
-                None => unreachable!(),
-            }
-        })
-    }
-
-    pub fn ptr_eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.inner, &other.inner)
-    }
-}
-
-impl<D, C> Clone for Snapshot<D, C>
-where
-    D: Driver,
-    C: Comp<D>,
-{
-    fn clone(&self) -> Self {
-        Snapshot {
-            inner: self.inner.clone(),
         }
     }
 }
