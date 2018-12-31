@@ -132,7 +132,7 @@ impl<D> Node<D> for ()
 where
     D: Driver,
 {
-    fn visit<NV>(&mut self, index: &mut usize, visitor: &mut NV) -> Result<(), NV::Err>
+    fn visit<NV>(&mut self, _index: &mut usize, _visitor: &mut NV) -> Result<(), NV::Err>
     where
         NV: NodeVisitor<D>,
     {
@@ -141,10 +141,10 @@ where
 
     fn diff<ND>(
         &mut self,
-        curr_index: &mut usize,
-        ancestor_index: &mut usize,
-        ancestor: &mut Self,
-        differ: &mut ND,
+        _curr_index: &mut usize,
+        _ancestor_index: &mut usize,
+        _ancestor: &mut Self,
+        _differ: &mut ND,
     ) -> Result<(), ND::Err>
     where
         ND: NodeDiffer<D>,

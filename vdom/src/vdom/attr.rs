@@ -284,14 +284,14 @@ impl<D> AttrList<D> for ()
 where
     D: Driver,
 {
-    fn visit<AV>(&mut self, visitor: &mut AV) -> Result<(), AV::Err>
+    fn visit<AV>(&mut self, _visitor: &mut AV) -> Result<(), AV::Err>
     where
         AV: AttrVisitor<D>,
     {
         Ok(())
     }
 
-    fn diff<AD>(&mut self, ancestor: &mut Self, differ: &mut AD) -> Result<(), AD::Err>
+    fn diff<AD>(&mut self, _ancestor: &mut Self, _differ: &mut AD) -> Result<(), AD::Err>
     where
         AD: AttrDiffer<D>,
     {
