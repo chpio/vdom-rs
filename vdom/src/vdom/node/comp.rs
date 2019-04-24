@@ -3,17 +3,22 @@ use crate::{
     vdom::node::{Node, NodeDiffer, NodeVisitor},
 };
 
-use std::{cell::RefCell, marker::PhantomData, mem, rc::Rc};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    marker::PhantomData,
+    mem,
+    rc::Rc,
+};
 
 pub trait Comp<D>
 where
     D: Driver,
     Self: Clone + Eq,
 {
-    type Input: Eq;
+    type Input: Clone + Eq;
     type Rendered: Node<D>;
 
-    fn new(input: &Self::Input) -> Self;
+    fn new(input: &Self::Input, ctx: &CompCtx<D, Self>) -> Self;
 
     fn render(&self, input: &Self::Input) -> Self::Rendered;
 }
@@ -24,7 +29,7 @@ where
     C: Comp<D>,
 {
     NotRendered,
-    Rendered(C, C::Rendered),
+    Rendered(C, C::Input, C::Rendered),
     Taken,
 }
 
@@ -33,9 +38,9 @@ where
     D: Driver,
     C: Comp<D>,
 {
-    input: C::Input,
+    input: Option<C::Input>,
     comp_rendered: CompNodeCompRendered<D, C>,
-    comp_instance: Option<CompInstance<D, C>>,
+    comp_ctx: Option<CompCtx<D, C>>,
     driver_store: D::CompStore,
 }
 
@@ -46,27 +51,23 @@ where
 {
     pub fn new(input: C::Input) -> CompNode<D, C> {
         CompNode {
-            input: input,
+            input: Some(input),
             comp_rendered: CompNodeCompRendered::NotRendered,
-            comp_instance: None,
+            comp_ctx: None,
             driver_store: D::new_comp_store(),
         }
     }
 
-    pub fn input(&mut self) -> &C::Input {
-        &self.input
+    pub fn comp_ctx(&self) -> Option<&CompCtx<D, C>> {
+        self.comp_ctx.as_ref()
     }
 
-    pub fn comp_instance(&self) -> Option<&CompInstance<D, C>> {
-        self.comp_instance.as_ref()
+    pub fn init_comp_ctx(&mut self) {
+        self.comp_ctx = Some(CompCtx::new(self.input.take().unwrap()));
     }
 
-    pub fn init_comp_instance(&mut self) {
-        self.comp_instance = Some(CompInstance::new(&self.input));
-    }
-
-    pub fn set_comp_instance(&mut self, comp_instance: CompInstance<D, C>) {
-        self.comp_instance = Some(comp_instance);
+    pub fn set_comp_ctx(&mut self, comp_instance: CompCtx<D, C>) {
+        self.comp_ctx = Some(comp_instance);
     }
 
     pub fn visit_rendered<NV>(&mut self, index: &mut usize, visitor: &mut NV) -> Result<(), NV::Err>
@@ -77,20 +78,20 @@ where
 
         let rendered = match &mut self.comp_rendered {
             NotRendered => {
-                let comp = self
-                    .comp_instance
+                let instance = self
+                    .comp_ctx
                     .as_ref()
-                    .expect("wrapper is None")
-                    .comp
-                    .borrow_mut();
-                let rendered = comp.render(&self.input);
-                self.comp_rendered = Rendered(comp.clone(), rendered);
+                    .expect("CompNode.comp_ctx is None")
+                    .instance_mut();
+                let rendered = instance.comp.render(&instance.input);
+                self.comp_rendered =
+                    Rendered(instance.comp.clone(), instance.input.clone(), rendered);
                 match &mut self.comp_rendered {
-                    Rendered(_, rendered) => rendered,
+                    Rendered(_, _, rendered) => rendered,
                     _ => unreachable!(),
                 }
             }
-            Rendered(_, rendered) => rendered,
+            Rendered(_, _, rendered) => rendered,
             Taken => panic!("comp_rendered is Taken"),
         };
         rendered.visit(index, visitor)
@@ -108,9 +109,11 @@ where
     {
         use self::CompNodeCompRendered::*;
 
-        let (ancestor_comp, ancestor_rendered) = match &mut ancestor.comp_rendered {
+        let (ancestor_comp, ancestor_input, ancestor_rendered) = match &mut ancestor.comp_rendered {
             NotRendered => panic!("ancestor.comp_rendered is NotRendered"),
-            Rendered(ancestor_comp, ancestor_rendered) => (ancestor_comp, ancestor_rendered),
+            Rendered(ancestor_comp, ancestor_input, ancestor_rendered) => {
+                (ancestor_comp, ancestor_input, ancestor_rendered)
+            }
             Taken => {
                 match &self.comp_rendered {
                     NotRendered => panic!("self.comp_rendered is NotRendered"),
@@ -121,25 +124,25 @@ where
         };
         let rendered = match &mut self.comp_rendered {
             NotRendered => {
-                let comp = self
-                    .comp_instance
+                let instance = self
+                    .comp_ctx
                     .as_ref()
-                    .expect("wrapper is None")
-                    .comp
-                    .borrow_mut();
-                let rendered = comp.render(&self.input);
-                if ancestor_comp == &*comp && ancestor.input == self.input {
+                    .expect("CompNode.comp_ctx is None")
+                    .instance_mut();
+                if ancestor_comp == &instance.comp && ancestor_input == &instance.input {
                     self.comp_rendered = mem::replace(&mut ancestor.comp_rendered, Taken);
                     return Ok(());
                 } else {
-                    self.comp_rendered = Rendered(comp.clone(), rendered);
+                    let rendered = instance.comp.render(&instance.input);
+                    self.comp_rendered =
+                        Rendered(instance.comp.clone(), instance.input.clone(), rendered);
                     match &mut self.comp_rendered {
-                        Rendered(_, rendered) => rendered,
+                        Rendered(_, _, rendered) => rendered,
                         _ => unreachable!(),
                     }
                 }
             }
-            Rendered(_, rendered) => rendered,
+            Rendered(_, _, rendered) => rendered,
             Taken => panic!("self.comp_rendered is Taken"),
         };
         rendered.diff(curr_index, ancestor_index, ancestor_rendered, differ)
@@ -181,36 +184,54 @@ where
     D: Driver,
     C: Comp<D>,
 {
-    comp: Rc<RefCell<C>>,
+    pub comp: C,
+    pub input: C::Input,
     phantom: PhantomData<D>,
 }
 
-impl<D, C> CompInstance<D, C>
+pub struct CompCtx<D, C>
 where
     D: Driver,
     C: Comp<D>,
 {
-    pub fn new(input: &C::Input) -> CompInstance<D, C> {
-        CompInstance {
-            comp: Rc::new(RefCell::new(C::new(input))),
+    instance: Rc<RefCell<Option<CompInstance<D, C>>>>,
+}
+
+impl<D, C> CompCtx<D, C>
+where
+    D: Driver,
+    C: Comp<D>,
+{
+    pub fn new(input: C::Input) -> CompCtx<D, C> {
+        let ctx = CompCtx {
+            instance: Rc::new(RefCell::new(None)),
+        };
+        let comp = C::new(&input, &ctx);
+        ctx.instance.replace(Some(CompInstance {
+            comp,
+            input,
             phantom: PhantomData,
-        }
+        }));
+        ctx
     }
 
-    pub fn comp(&self) -> &Rc<RefCell<C>> {
-        &self.comp
+    pub fn instance(&self) -> Ref<'_, CompInstance<D, C>> {
+        Ref::map(self.instance.borrow(), |r| r.as_ref().unwrap())
+    }
+
+    pub fn instance_mut(&self) -> RefMut<'_, CompInstance<D, C>> {
+        RefMut::map(self.instance.borrow_mut(), |r| r.as_mut().unwrap())
     }
 }
 
-impl<D, C> Clone for CompInstance<D, C>
+impl<D, C> Clone for CompCtx<D, C>
 where
     D: Driver,
     C: Comp<D>,
 {
     fn clone(&self) -> Self {
-        CompInstance {
-            comp: self.comp.clone(),
-            phantom: PhantomData,
+        CompCtx {
+            instance: self.instance.clone(),
         }
     }
 }

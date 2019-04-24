@@ -142,7 +142,7 @@ impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
     where
         C: Comp<WebDriver>,
     {
-        comp.init_comp_instance();
+        comp.init_comp_ctx();
         comp.visit_rendered(index, self)
     }
 }
@@ -296,11 +296,9 @@ impl<'a> NodeDiffer<WebDriver> for NodeStdDiffer<'a> {
     where
         C: Comp<WebDriver>,
     {
-        if curr.comp_instance().is_none() {
-            let instance = ancestor
-                .comp_instance()
-                .expect("ancestor.comp_wrapper is None");
-            curr.set_comp_instance(instance.clone());
+        if curr.comp_ctx().is_none() {
+            let ctx = ancestor.comp_ctx().expect("ancestor.comp_ctx is None");
+            curr.set_comp_ctx(ctx.clone());
         }
         curr.diff_rendered(curr_index, ancestor_index, ancestor, self)
     }
