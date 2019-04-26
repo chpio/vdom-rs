@@ -8,7 +8,7 @@ use std::{
     hash::{Hash, Hasher},
     marker::PhantomData,
     mem,
-    rc::Rc,
+    rc::{Rc, Weak},
 };
 
 pub trait Comp<D>
@@ -19,7 +19,7 @@ where
     type Input: Clone + Eq;
     type Rendered: Node<D>;
 
-    fn new(input: &Self::Input, ctx: &CompCtx<D, Self>) -> Self;
+    fn new(input: &Self::Input, ctx: CompCtx<D, Self>) -> Self;
 
     fn render(&self, input: &Self::Input) -> Self::Rendered;
 }
@@ -41,8 +41,8 @@ where
 {
     input: Option<C::Input>,
     comp_rendered: CompNodeCompRendered<D, C>,
-    comp_ctx: Option<CompCtx<D, C>>,
-    driver_store: D::CompStore,
+    comp_ctx: Option<StrongCompCtx<D, C>>,
+    driver_store: D::CompStore, // TODO: rename to `D::CompNodeStore`?
 }
 
 impl<D, C> CompNode<D, C>
@@ -59,15 +59,15 @@ where
         }
     }
 
-    pub fn comp_ctx(&self) -> Option<&CompCtx<D, C>> {
+    pub fn comp_ctx(&self) -> Option<&StrongCompCtx<D, C>> {
         self.comp_ctx.as_ref()
     }
 
     pub fn init_comp_ctx(&mut self) {
-        self.comp_ctx = Some(CompCtx::new(self.input.take().unwrap()));
+        self.comp_ctx = Some(StrongCompCtx::new(self.input.take().unwrap()));
     }
 
-    pub fn set_comp_ctx(&mut self, comp_instance: CompCtx<D, C>) {
+    pub fn set_comp_ctx(&mut self, comp_instance: StrongCompCtx<D, C>) {
         self.comp_ctx = Some(comp_instance);
     }
 
@@ -190,7 +190,7 @@ where
     phantom: PhantomData<D>,
 }
 
-pub struct CompCtx<D, C>
+pub struct StrongCompCtx<D, C>
 where
     D: Driver,
     C: Comp<D>,
@@ -198,22 +198,28 @@ where
     instance: Rc<RefCell<Option<CompInstance<D, C>>>>,
 }
 
-impl<D, C> CompCtx<D, C>
+impl<D, C> StrongCompCtx<D, C>
 where
     D: Driver,
     C: Comp<D>,
 {
-    pub fn new(input: C::Input) -> CompCtx<D, C> {
-        let ctx = CompCtx {
+    pub fn new(input: C::Input) -> StrongCompCtx<D, C> {
+        let ctx = StrongCompCtx {
             instance: Rc::new(RefCell::new(None)),
         };
-        let comp = C::new(&input, &ctx);
-        ctx.instance.replace(Some(CompInstance {
+        let comp = C::new(&input, ctx.downgrade());
+        *ctx.instance.borrow_mut() = Some(CompInstance {
             comp,
             input,
             phantom: PhantomData,
-        }));
+        });
         ctx
+    }
+
+    pub fn downgrade(&self) -> CompCtx<D, C> {
+        CompCtx {
+            instance: Rc::downgrade(&self.instance),
+        }
     }
 
     pub fn instance(&self) -> Ref<'_, CompInstance<D, C>> {
@@ -222,6 +228,65 @@ where
 
     pub fn instance_mut(&self) -> RefMut<'_, CompInstance<D, C>> {
         RefMut::map(self.instance.borrow_mut(), |r| r.as_mut().unwrap())
+    }
+}
+
+impl<D, C> Clone for StrongCompCtx<D, C>
+where
+    D: Driver,
+    C: Comp<D>,
+{
+    fn clone(&self) -> Self {
+        StrongCompCtx {
+            instance: self.instance.clone(),
+        }
+    }
+}
+
+impl<D, C> PartialEq for StrongCompCtx<D, C>
+where
+    D: Driver,
+    C: Comp<D>,
+{
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.instance, &other.instance)
+    }
+}
+
+impl<D, C> Eq for StrongCompCtx<D, C>
+where
+    D: Driver,
+    C: Comp<D>,
+{
+}
+
+impl<D, C> Hash for StrongCompCtx<D, C>
+where
+    D: Driver,
+    C: Comp<D>,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_usize(&*self.instance as *const _ as usize);
+    }
+}
+
+pub struct CompCtx<D, C>
+where
+    D: Driver,
+    C: Comp<D>,
+{
+    instance: Weak<RefCell<Option<CompInstance<D, C>>>>,
+}
+
+impl<D, C> CompCtx<D, C>
+where
+    D: Driver,
+    C: Comp<D>,
+{
+    pub fn upgrade(&self) -> Option<StrongCompCtx<D, C>> {
+        Some(StrongCompCtx {
+            instance: self.instance.upgrade()?,
+        })
     }
 }
 
@@ -234,32 +299,5 @@ where
         CompCtx {
             instance: self.instance.clone(),
         }
-    }
-}
-
-impl<D, C> PartialEq for CompCtx<D, C>
-where
-    D: Driver,
-    C: Comp<D>,
-{
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.instance, &other.instance)
-    }
-}
-
-impl<D, C> Eq for CompCtx<D, C>
-where
-    D: Driver,
-    C: Comp<D>,
-{
-}
-
-impl<D, C> Hash for CompCtx<D, C>
-where
-    D: Driver,
-    C: Comp<D>,
-{
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_usize(&*self.instance as *const _ as usize);
     }
 }
