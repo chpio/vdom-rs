@@ -5,6 +5,7 @@ use crate::{
 
 use std::{
     cell::{Ref, RefCell, RefMut},
+    hash::{Hash, Hasher},
     marker::PhantomData,
     mem,
     rc::Rc,
@@ -233,5 +234,32 @@ where
         CompCtx {
             instance: self.instance.clone(),
         }
+    }
+}
+
+impl<D, C> PartialEq for CompCtx<D, C>
+where
+    D: Driver,
+    C: Comp<D>,
+{
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.instance, &other.instance)
+    }
+}
+
+impl<D, C> Eq for CompCtx<D, C>
+where
+    D: Driver,
+    C: Comp<D>,
+{
+}
+
+impl<D, C> Hash for CompCtx<D, C>
+where
+    D: Driver,
+    C: Comp<D>,
+{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_usize(&*self.instance as *const _ as usize);
     }
 }
