@@ -1,1 +1,3 @@
+edition = "2018"
+newline_style = "Unix"
 force_multiline_blocks = true
