@@ -1,6 +1,11 @@
 use crate::Error;
+use futures::{
+    future::LocalFutureObj,
+    task::{LocalSpawn, SpawnError},
+    Future, FutureExt,
+};
 use vdom::{
-    driver::Driver,
+    driver::{Driver, DriverCtx},
     vdom::{
         attr::{Attr, AttrDiffer, AttrRefValue, AttrVisitor},
         node::{Comp, CompNode, Node, NodeDiffer, NodeVisitor, Tag, Text},
@@ -8,7 +13,7 @@ use vdom::{
 };
 use web_sys as web;
 
-pub struct WebDriver;
+pub struct WebDriver {}
 
 #[derive(Default)]
 pub struct AttrStore;
@@ -47,6 +52,15 @@ impl Driver for WebDriver {
     fn new_comp_store() -> CompStore {
         Default::default()
     }
+
+    fn spawn<F>(&mut self, fut: F)
+    where
+        F: Future<Output = ()> + 'static,
+    {
+        wasm_bindgen_futures::spawn_local(futures::compat::Compat::new(Box::pin(
+            fut.map(|_| Ok(())),
+        )));
+    }
 }
 
 pub struct App<N>
@@ -54,6 +68,7 @@ where
     N: Node<WebDriver>,
 {
     root_element: web::Element,
+    driver_ctx: DriverCtx<WebDriver>,
     node: N,
 }
 
@@ -62,13 +77,19 @@ where
     N: Node<WebDriver>,
 {
     pub fn new(mut node: N, root_element: web::Element) -> Result<App<N>, Error> {
+        let driver_ctx = DriverCtx::new(WebDriver {});
         node.visit(
             &mut 0,
             &mut NodeAddVisitor {
                 parent_element: &root_element,
+                driver_ctx: &driver_ctx,
             },
         )?;
-        Ok(App { root_element, node })
+        Ok(App {
+            root_element,
+            driver_ctx,
+            node,
+        })
     }
 
     pub fn set(&mut self, mut node: N) -> Result<(), Error> {
@@ -77,6 +98,7 @@ where
             &mut 0,
             &mut self.node,
             &mut NodeStdDiffer {
+                driver_ctx: &self.driver_ctx,
                 parent_element: &self.root_element,
             },
         )?;
@@ -86,6 +108,7 @@ where
 }
 
 struct NodeAddVisitor<'a> {
+    driver_ctx: &'a DriverCtx<WebDriver>,
     parent_element: &'a web::Element,
 }
 
@@ -105,6 +128,7 @@ impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
             parent_element: &elem,
         })?;
         tag.visit_children(&mut NodeAddVisitor {
+            driver_ctx: &self.driver_ctx,
             parent_element: &elem,
         })?;
         let parent_node = AsRef::<web::Node>::as_ref(&self.parent_element);
@@ -142,7 +166,7 @@ impl<'a> NodeVisitor<WebDriver> for NodeAddVisitor<'a> {
     where
         C: Comp<WebDriver>,
     {
-        comp.init_comp_ctx();
+        comp.init_comp_ctx(self.driver_ctx.clone());
         comp.visit_rendered(index, self)
     }
 }
@@ -208,6 +232,7 @@ impl<'a> AttrVisitor<WebDriver> for AttrAddVisitor<'a> {
 }
 
 struct NodeStdDiffer<'a> {
+    driver_ctx: &'a DriverCtx<WebDriver>,
     parent_element: &'a web::Element,
 }
 
@@ -221,6 +246,7 @@ impl<'a> NodeDiffer<WebDriver> for NodeStdDiffer<'a> {
         curr.visit(
             index,
             &mut NodeAddVisitor {
+                driver_ctx: self.driver_ctx,
                 parent_element: &self.parent_element,
             },
         )
@@ -261,6 +287,7 @@ impl<'a> NodeDiffer<WebDriver> for NodeStdDiffer<'a> {
         curr.diff_children(
             ancestor,
             &mut NodeStdDiffer {
+                driver_ctx: self.driver_ctx,
                 parent_element: &elem,
             },
         )?;

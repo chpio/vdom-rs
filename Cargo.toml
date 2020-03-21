@@ -1,6 +1,11 @@
+[profile.release]
+lto = true
+
 [workspace]
 members = [
+    "sink_cell",
     "vdom",
     "vdom_macro",
     "vdom_web",
+    "examples/*",
 ]

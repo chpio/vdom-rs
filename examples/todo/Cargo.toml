@@ -1,17 +1,18 @@
 [package]
-name = "vdom_web"
+name = "todo"
 version = "0.0.0"
 authors = ["Thomas Heck <t@b128.net>"]
 edition = "2018"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
-vdom = {path = "../vdom"}
-wasm-bindgen = "0.2.27"
-wasm-bindgen-futures = "0.3"
-
-[dependencies.futures-preview]
-version = "0.3.0-alpha"
-features = ["compat"]
+vdom = {path = "../../vdom"}
+vdom_macro = {path = "../../vdom_macro"}
+vdom_web = {path = "../../vdom_web"}
+wasm-bindgen = "0.2.25"
 
 [dependencies.web-sys]
 version = "0.3.2"
@@ -22,6 +23,5 @@ features = [
     "Node",
     "Text",
     "Window",
-    "CharacterData",
-    "NodeList",
+    "console",
 ]

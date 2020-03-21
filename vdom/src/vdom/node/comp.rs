@@ -1,14 +1,17 @@
 use crate::{
-    driver::Driver,
+    driver::{Driver, DriverCtx},
     vdom::node::{Node, NodeDiffer, NodeVisitor},
 };
-
+use futures::{channel::mpsc, Sink, Stream, StreamExt as _};
 use std::{
     cell::{Ref, RefCell, RefMut},
+    future::Future,
     hash::{Hash, Hasher},
     marker::PhantomData,
     mem,
+    pin::Pin,
     rc::{Rc, Weak},
+    task,
 };
 
 pub trait Comp<D>
@@ -63,8 +66,8 @@ where
         self.comp_ctx.as_ref()
     }
 
-    pub fn init_comp_ctx(&mut self) {
-        self.comp_ctx = Some(StrongCompCtx::new(self.input.take().unwrap()));
+    pub fn init_comp_ctx(&mut self, driver_ctx: DriverCtx<D>) {
+        self.comp_ctx = Some(StrongCompCtx::new(driver_ctx, self.input.take().unwrap()));
     }
 
     pub fn set_comp_ctx(&mut self, comp_instance: StrongCompCtx<D, C>) {
@@ -187,6 +190,7 @@ where
 {
     pub comp: C,
     pub input: C::Input,
+    driver_ctx: DriverCtx<D>,
     phantom: PhantomData<D>,
 }
 
@@ -203,7 +207,7 @@ where
     D: Driver,
     C: Comp<D>,
 {
-    pub fn new(input: C::Input) -> StrongCompCtx<D, C> {
+    pub fn new(driver_ctx: DriverCtx<D>, input: C::Input) -> StrongCompCtx<D, C> {
         let ctx = StrongCompCtx {
             instance: Rc::new(RefCell::new(None)),
         };
@@ -211,6 +215,7 @@ where
         *ctx.instance.borrow_mut() = Some(CompInstance {
             comp,
             input,
+            driver_ctx,
             phantom: PhantomData,
         });
         ctx
@@ -283,10 +288,52 @@ where
     D: Driver,
     C: Comp<D>,
 {
-    pub fn upgrade(&self) -> Option<StrongCompCtx<D, C>> {
-        Some(StrongCompCtx {
-            instance: self.instance.upgrade()?,
+    pub fn build_stream<F, T, R>(&self, f: F) -> mpsc::UnboundedSender<T>
+    where
+        F: FnOnce(mpsc::UnboundedReceiver<T>) -> R,
+        R: Future<Output = ()> + 'static,
+    {
+        let (sender, receiver) = mpsc::unbounded();
+
+        let fut = f(receiver);
+
+        // let id =
+        self.with_instance(|instance| {
+            instance.driver_ctx.with_mut(|drv| {
+                drv.spawn(fut);
+            });
+            // instance.driver_ctx.next_id()
         })
+        .unwrap();
+
+        sender
+        // Sender { sender, id }
+    }
+
+    pub fn with_instance<F, R>(&self, f: F) -> Option<R>
+    where
+        F: FnOnce(&CompInstance<D, C>) -> R,
+    {
+        if let Some(instance) = self.instance.upgrade() {
+            let instance = instance.borrow();
+            let instance = instance.as_ref().unwrap();
+            Some(f(instance))
+        } else {
+            None
+        }
+    }
+
+    pub fn with_instance_mut<F, R>(&self, f: F) -> Option<R>
+    where
+        F: FnOnce(&mut CompInstance<D, C>) -> R,
+    {
+        if let Some(instance) = self.instance.upgrade() {
+            let mut instance = instance.borrow_mut();
+            let instance = instance.as_mut().unwrap();
+            Some(f(instance))
+        } else {
+            None
+        }
     }
 }
 
@@ -301,3 +348,129 @@ where
         }
     }
 }
+
+// #[derive(Debug)]
+// pub struct Sender<T> {
+//     sender: mpsc::UnboundedSender<T>,
+//     id: u64,
+// }
+
+// impl<T> PartialEq for Sender<T> {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.id == other.id
+//     }
+// }
+
+// impl<T> Eq for Sender<T> {}
+
+// impl<T> Clone for Sender<T> {
+//     fn clone(&self) -> Self {
+//         Sender {
+//             sender: self.sender.clone(),
+//             id: self.id,
+//         }
+//     }
+// }
+
+// pub struct ForwardWith<S, F, R, D, C>
+// where
+//     S: Stream,
+//     F: FnMut(&CompInstance<D, C>) -> &R,
+//     R: Sink<S::Item>,
+//     D: Driver,
+//     C: Comp<D>,
+// {
+//     stream: S,
+//     sink: R,
+//     f: F,
+//     ctx: CompCtx<D, C>,
+// }
+
+// // impl ForwardWith<S, F, R, D, C>
+// // where
+// //     S: Stream,
+// //     F: FnMut(&'_ mut CompInstance<D, C>) -> &'_ mut R,
+// //     R: Sink<S::Item>,
+// //     D: Driver,
+// //     C: Comp<D>,
+// // {
+// // }
+
+// impl<S, F, R, D, C> Future for ForwardWith<S, F, R, D, C>
+// where
+//     S: Stream,
+//     F: FnMut(&'_ mut CompInstance<D, C>) -> &'_ R,
+//     R: Sink<S::Item>,
+//     D: Driver,
+//     C: Comp<D>,
+// {
+//     type Output = ();
+
+//     fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+//         // loop {
+//         //     match self.as_mut().stream().poll_next(cx) {
+//         //         Poll::Ready(Some(Ok(item))) => ready!(self.as_mut().try_start_send(cx, item))?,
+//         //         Poll::Ready(Some(Err(e))) => return Poll::Ready(Err(e)),
+//         //         Poll::Ready(None) => {
+//         //             ready!(self
+//         //                 .as_mut()
+//         //                 .sink()
+//         //                 .as_pin_mut()
+//         //                 .expect(INVALID_POLL)
+//         //                 .poll_close(cx))?;
+//         //             self.as_mut().sink().set(None);
+//         //             return Poll::Ready(Ok(()));
+//         //         }
+//         //         Poll::Pending => {
+//         //             ready!(self
+//         //                 .as_mut()
+//         //                 .sink()
+//         //                 .as_pin_mut()
+//         //                 .expect(INVALID_POLL)
+//         //                 .poll_flush(cx))?;
+//         //             return Poll::Pending;
+//         //         }
+//         //     }
+//         // }
+
+//         unimplemented!()
+//     }
+// }
+
+// impl<S, F, R, D, C> LifetimeReceiver<D, C> for ForwardWith<S, F, R, D, C>
+// where
+//     S: Stream,
+//     F: FnMut(&'_ mut CompInstance<D, C>) -> & R,
+//     R: Sink<S::Item> + Eq,
+//     D: Driver,
+//     C: Comp<D>,
+// {
+//     fn on_input_changed(&mut self, instance: &mut CompInstance<D, C>) {
+//         let new_sink = self.f(instance);
+
+//         if new_sink != self.sink {
+//             self.sink = new_sink;
+//         }
+//     }
+// }
+
+// pub trait StreamExt: Stream {
+//     fn forward_with<F, R, D, C>(self, ctx: CompCtx<D, C>, f: F) -> ForwardWith<Self, F, R, D, C>
+//     where
+//         Self: Sized,
+//         F: FnMut(&'_ mut CompInstance<D, C>) -> &'_ mut R,
+//         R: Sink<Self::Item>,
+//         D: Driver,
+//         C: Comp<D>,
+//     {
+//         unimplemented!()
+//     }
+// }
+
+// pub trait LifetimeReceiver<D, C>
+// where
+//     D: Driver,
+//     C: Comp<D>,
+// {
+//     fn on_input_changed(&mut self, _instance: &mut CompInstance<D, C>) {}
+// }
